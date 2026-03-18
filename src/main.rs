@@ -34,6 +34,16 @@ mod test {
     use crate::Account;
 
     #[test]
+    fn test_new() {
+        let account = Account::new(42);
+        assert_eq!(account.client, 42);
+        assert_eq!(account.available, 0);
+        assert_eq!(account.held, 0);
+        assert_eq!(account.total, 0);
+        assert!(!account.locked);
+    }
+
+    #[test]
     fn test_deposit() {
         let mut account = Account::new(0);
         account.deposit(100);
