@@ -1,3 +1,3 @@
-mod account;
+mod lib;
 
 fn main() {}
