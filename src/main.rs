@@ -1,3 +1,4 @@
+use std::{error::Error, fmt::Display};
 
 fn main() {}
 
@@ -9,6 +10,23 @@ struct Account {
     held: u64,
     total: u64,
     locked: bool,
+}
+
+#[derive(Debug)]
+enum WithdrawalError {
+    NotEnoughFunds,
+    AccountLocked,
+}
+
+impl Error for WithdrawalError {}
+
+impl Display for WithdrawalError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            WithdrawalError::NotEnoughFunds => f.write_str("not enough funds"),
+            WithdrawalError::AccountLocked => f.write_str("account is locked"),
+        }
+    }
 }
 
 impl Account {
@@ -27,11 +45,24 @@ impl Account {
         self.total += amount;
     }
 
+    fn withdraw(&mut self, amount: u64) -> Result<(), WithdrawalError> {
+        if self.locked {
+            return Err(WithdrawalError::AccountLocked);
+        }
+        if self.available < amount as i64 {
+            return Err(WithdrawalError::NotEnoughFunds);
+        }
+        self.available -= amount as i64;
+        self.total -= amount;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod test {
     use crate::Account;
+    use crate::WithdrawalError;
 
     #[test]
     fn test_new() {
@@ -52,5 +83,39 @@ mod test {
         assert_eq!(account.total, 100);
         assert_eq!(account.held, 0);
         assert!(!account.locked);
+    }
+
+    #[test]
+    fn test_withdraw_success() {
+        let mut account = Account::new(0);
+        account.deposit(100);
+        let result = account.withdraw(20);
+        assert!(result.is_ok());
+        assert_eq!(account.client, 0);
+        assert_eq!(account.available, 80);
+        assert_eq!(account.total, 80);
+        assert_eq!(account.held, 0);
+        assert!(!account.locked);
+    }
+
+    #[test]
+    fn test_withdraw_insufficient_funds() {
+        let mut account = Account::new(0);
+        account.deposit(100);
+        let result = account.withdraw(200);
+        assert!(matches!(result, Err(WithdrawalError::NotEnoughFunds)));
+        assert_eq!(account.available, 100);
+        assert_eq!(account.total, 100);
+    }
+
+    #[test]
+    fn test_withdraw_locked() {
+        let mut account = Account::new(0);
+        account.deposit(100);
+        account.locked = true;
+        let result = account.withdraw(50);
+        assert!(matches!(result, Err(WithdrawalError::AccountLocked)));
+        assert_eq!(account.available, 100);
+        assert_eq!(account.total, 100);
     }
 }
