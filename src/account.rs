@@ -55,6 +55,11 @@ impl Account {
 
         Ok(())
     }
+
+    pub fn dispute(&mut self, amount: u64) {
+        self.available -= amount as i64;
+        self.held += amount;
+    }
 }
 
 #[cfg(test)]
@@ -113,6 +118,26 @@ mod test {
         let result = account.withdraw(50);
         assert!(matches!(result, Err(WithdrawalError::AccountLocked)));
         assert_eq!(account.available, 100);
+        assert_eq!(account.total, 100);
+    }
+
+    #[test]
+    fn test_dispute() {
+        let mut account = Account::new(0);
+        account.deposit(100);
+        account.dispute(40);
+        assert_eq!(account.available, 60);
+        assert_eq!(account.held, 40);
+        assert_eq!(account.total, 100);
+    }
+
+    #[test]
+    fn test_dispute_makes_available_negative() {
+        let mut account = Account::new(0);
+        account.deposit(100);
+        account.dispute(150);
+        assert_eq!(account.available, -50);
+        assert_eq!(account.held, 150);
         assert_eq!(account.total, 100);
     }
 }
