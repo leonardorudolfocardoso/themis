@@ -1,4 +1,4 @@
-pub enum Transaction {
+pub enum Event {
     Deposit { client: u16, tx: u32, amount: u64 },
     Withdrawal { client: u16, tx: u32, amount: u64 },
     Dispute { client: u16, tx: u32 },
