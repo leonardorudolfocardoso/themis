@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Display};
+use std::collections::HashMap;
 
 /// Monetary amounts are stored as integer units of 0.0001 (4 decimal places).
 /// e.g. 1.2345 is represented as 12345.
@@ -18,23 +18,6 @@ impl Account {
             held: 0,
             total: 0,
             locked: false,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum Error {
-    NotEnoughFunds,
-    AccountLocked,
-}
-
-impl std::error::Error for Error {}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::NotEnoughFunds => f.write_str("not enough funds"),
-            Error::AccountLocked => f.write_str("account is locked"),
         }
     }
 }
