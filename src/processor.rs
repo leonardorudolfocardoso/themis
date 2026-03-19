@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::account::Account;
-use crate::event::{Event, TransactionRecord, TransactionState};
+use crate::event::{Event, TransactionKind, TransactionRecord, TransactionState};
 
 pub struct Processor {
     accounts: HashMap<u16, Account>,
@@ -51,6 +51,7 @@ impl Processor {
                 TransactionRecord {
                     client,
                     amount,
+                    kind: TransactionKind::Deposit,
                     state: TransactionState::Valid,
                 },
             );
@@ -68,6 +69,7 @@ impl Processor {
                 TransactionRecord {
                     client,
                     amount,
+                    kind: TransactionKind::Withdrawal,
                     state: TransactionState::Valid,
                 },
             );
@@ -77,7 +79,7 @@ impl Processor {
     fn dispute(&mut self, client: u16, tx: u32) {
         if let Some(record) = self.records.get_mut(&tx)
             && record.client == client
-            && record.state.is_disputable()
+            && record.is_disputable()
             && let Some(account) = self.accounts.get_mut(&client)
         {
             account.hold(record.amount);
@@ -205,6 +207,18 @@ mod test {
         let account = accounts.get(&1).unwrap();
         assert_eq!(account.total(), 0);
         assert!(account.locked());
+    }
+
+    #[test]
+    fn test_dispute_on_withdrawal_is_ignored() {
+        let accounts = process(vec![
+            Event::Deposit { client: 1, tx: 1, amount: 100 },
+            Event::Withdrawal { client: 1, tx: 2, amount: 40 },
+            Event::Dispute { client: 1, tx: 2 },
+        ]);
+        let account = accounts.get(&1).unwrap();
+        assert_eq!(account.available(), 60);
+        assert_eq!(account.held(), 0);
     }
 
     #[test]

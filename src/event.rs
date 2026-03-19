@@ -27,8 +27,20 @@ impl TransactionState {
     }
 }
 
+pub(crate) enum TransactionKind {
+    Deposit,
+    Withdrawal,
+}
+
 pub(crate) struct TransactionRecord {
     pub(crate) client: u16,
     pub(crate) amount: u64,
+    pub(crate) kind: TransactionKind,
     pub(crate) state: TransactionState,
+}
+
+impl TransactionRecord {
+    pub(crate) fn is_disputable(&self) -> bool {
+        matches!(self.kind, TransactionKind::Deposit) && self.state.is_disputable()
+    }
 }
