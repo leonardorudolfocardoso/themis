@@ -106,7 +106,22 @@ impl Processor {
     }
 
     fn withdraw(&mut self, client: u16, tx: u32, amount: u64) {
-        todo!()
+        let account = self
+            .accounts
+            .entry(client)
+            .or_insert_with(|| Account::new(client));
+        if !account.locked && account.available >= amount as i64 {
+            account.available -= amount as i64;
+            account.total -= amount;
+            self.records.insert(
+                tx,
+                TransactionRecord {
+                    client,
+                    amount,
+                    state: TransactionState::Valid,
+                },
+            );
+        }
     }
 
     fn dispute(&mut self, client: u16, tx: u32) {
@@ -147,6 +162,36 @@ mod test {
         assert_eq!(account.total, 100);
         assert_eq!(account.held, 0);
         assert!(!account.locked);
+    }
+
+    #[test]
+    fn test_withdraw_decreases_available_and_total() {
+        let mut processor = setup();
+        processor.withdraw(1, 2, 20);
+        let account = processor.accounts().get(&1).unwrap();
+        assert_eq!(account.available, 80);
+        assert_eq!(account.total, 80);
+        assert_eq!(account.held, 0);
+    }
+
+    #[test]
+    fn test_withdraw_insufficient_funds_is_silently_ignored() {
+        let mut processor = setup();
+        processor.withdraw(1, 2, 200);
+        let account = processor.accounts().get(&1).unwrap();
+        assert_eq!(account.available, 100);
+        assert_eq!(account.total, 100);
+    }
+
+    #[test]
+    fn test_withdraw_locked_is_silently_ignored() {
+        let mut processor = setup();
+        processor.dispute(1, 1);
+        processor.chargeback(1, 1);
+        processor.withdraw(1, 2, 50);
+        let account = processor.accounts().get(&1).unwrap();
+        assert_eq!(account.total, 0);
+        assert!(account.locked);
     }
 
     #[test]
