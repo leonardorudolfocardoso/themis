@@ -125,7 +125,15 @@ impl Processor {
     }
 
     fn dispute(&mut self, client: u16, tx: u32) {
-        todo!()
+        if let Some(record) = self.records.get_mut(&tx)
+            && record.client == client
+            && record.state.is_disputable()
+            && let Some(account) = self.accounts.get_mut(&client)
+        {
+            account.available -= record.amount as i64;
+            account.held += record.amount;
+            record.state = TransactionState::Disputed;
+        }
     }
 
     fn resolve(&mut self, client: u16, tx: u32) {
@@ -192,6 +200,35 @@ mod test {
         let account = processor.accounts().get(&1).unwrap();
         assert_eq!(account.total, 0);
         assert!(account.locked);
+    }
+
+    #[test]
+    fn test_dispute_decreases_available_and_increases_held() {
+        let mut processor = setup();
+        processor.dispute(1, 1);
+        let account = processor.accounts().get(&1).unwrap();
+        assert_eq!(account.available, 0);
+        assert_eq!(account.held, 100);
+        assert_eq!(account.total, 100);
+    }
+
+    #[test]
+    fn test_dispute_on_wrong_client_is_ignored() {
+        let mut processor = setup();
+        processor.dispute(2, 1);
+        let account = processor.accounts().get(&1).unwrap();
+        assert_eq!(account.available, 100);
+        assert_eq!(account.held, 0);
+    }
+
+    #[test]
+    fn test_dispute_on_invalid_state_is_ignored() {
+        let mut processor = setup();
+        processor.dispute(1, 1);
+        processor.dispute(1, 1);
+        let account = processor.accounts().get(&1).unwrap();
+        assert_eq!(account.available, 0);
+        assert_eq!(account.held, 100);
     }
 
     #[test]
