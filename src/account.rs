@@ -82,3 +82,87 @@ impl Account {
         self.locked = true;
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::{Account, AccountError};
+
+    #[test]
+    fn test_deposit_increases_available_and_total() {
+        let mut account = Account::new(1);
+        assert!(account.deposit(100).is_ok());
+        assert_eq!(account.available(), 100);
+        assert_eq!(account.total(), 100);
+        assert_eq!(account.held(), 0);
+    }
+
+    #[test]
+    fn test_deposit_on_locked_account_returns_error() {
+        let mut account = Account::new(1);
+        account.deposit(100).unwrap();
+        account.hold(100);
+        account.chargeback(100);
+        assert!(matches!(account.deposit(50), Err(AccountError::Locked)));
+        assert_eq!(account.available(), 0);
+        assert_eq!(account.total(), 0);
+    }
+
+    #[test]
+    fn test_withdraw_decreases_available_and_total() {
+        let mut account = Account::new(1);
+        account.deposit(100).unwrap();
+        assert!(account.withdraw(40).is_ok());
+        assert_eq!(account.available(), 60);
+        assert_eq!(account.total(), 60);
+    }
+
+    #[test]
+    fn test_withdraw_insufficient_funds_returns_error() {
+        let mut account = Account::new(1);
+        account.deposit(100).unwrap();
+        assert!(matches!(account.withdraw(200), Err(AccountError::InsufficientFunds)));
+        assert_eq!(account.available(), 100);
+        assert_eq!(account.total(), 100);
+    }
+
+    #[test]
+    fn test_withdraw_on_locked_account_returns_error() {
+        let mut account = Account::new(1);
+        account.deposit(100).unwrap();
+        account.hold(100);
+        account.chargeback(100);
+        assert!(matches!(account.withdraw(50), Err(AccountError::Locked)));
+    }
+
+    #[test]
+    fn test_hold_moves_available_to_held() {
+        let mut account = Account::new(1);
+        account.deposit(100).unwrap();
+        account.hold(40);
+        assert_eq!(account.available(), 60);
+        assert_eq!(account.held(), 40);
+        assert_eq!(account.total(), 100);
+    }
+
+    #[test]
+    fn test_release_moves_held_to_available() {
+        let mut account = Account::new(1);
+        account.deposit(100).unwrap();
+        account.hold(40);
+        account.release(40);
+        assert_eq!(account.available(), 100);
+        assert_eq!(account.held(), 0);
+        assert_eq!(account.total(), 100);
+    }
+
+    #[test]
+    fn test_chargeback_removes_held_and_total_and_locks() {
+        let mut account = Account::new(1);
+        account.deposit(100).unwrap();
+        account.hold(100);
+        account.chargeback(100);
+        assert_eq!(account.held(), 0);
+        assert_eq!(account.total(), 0);
+        assert!(account.locked());
+    }
+}
