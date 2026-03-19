@@ -1,7 +1,48 @@
 use std::collections::HashMap;
 
-use crate::account::Account;
 use crate::transaction::{Transaction, TransactionRecord, TransactionState};
+
+/// Monetary amounts are stored as integer units of 0.0001 (4 decimal places).
+/// e.g. 1.2345 is represented as 12345.
+pub struct Account {
+    client: u16,
+    available: i64,
+    held: u64,
+    total: u64,
+    locked: bool,
+}
+
+impl Account {
+    fn new(client: u16) -> Self {
+        Self {
+            client,
+            available: 0,
+            held: 0,
+            total: 0,
+            locked: false,
+        }
+    }
+
+    pub fn client(&self) -> u16 {
+        self.client
+    }
+
+    pub fn available(&self) -> i64 {
+        self.available
+    }
+
+    pub fn held(&self) -> u64 {
+        self.held
+    }
+
+    pub fn total(&self) -> u64 {
+        self.total
+    }
+
+    pub fn locked(&self) -> bool {
+        self.locked
+    }
+}
 
 pub struct Processor {
     accounts: HashMap<u16, Account>,
@@ -119,7 +160,7 @@ impl Processor {
 #[cfg(test)]
 mod test {
     use super::Processor;
-    use crate::account::Account;
+    use super::Account;
     use crate::transaction::Transaction;
 
     fn process(transactions: Vec<Transaction>) -> HashMap<u16, Account> {
@@ -136,10 +177,10 @@ mod test {
             amount: 100,
         }]);
         let account = accounts.get(&1).unwrap();
-        assert_eq!(account.available, 100);
-        assert_eq!(account.total, 100);
-        assert_eq!(account.held, 0);
-        assert!(!account.locked);
+        assert_eq!(account.available(), 100);
+        assert_eq!(account.total(), 100);
+        assert_eq!(account.held(), 0);
+        assert!(!account.locked());
     }
 
     #[test]
@@ -149,8 +190,8 @@ mod test {
             Transaction::Deposit { client: 1, tx: 1, amount: 999 },
         ]);
         let account = accounts.get(&1).unwrap();
-        assert_eq!(account.available, 100);
-        assert_eq!(account.total, 100);
+        assert_eq!(account.available(), 100);
+        assert_eq!(account.total(), 100);
     }
 
     #[test]
@@ -161,8 +202,8 @@ mod test {
             Transaction::Withdrawal { client: 1, tx: 2, amount: 20 },
         ]);
         let account = accounts.get(&1).unwrap();
-        assert_eq!(account.available, 80);
-        assert_eq!(account.total, 80);
+        assert_eq!(account.available(), 80);
+        assert_eq!(account.total(), 80);
     }
 
     #[test]
@@ -174,9 +215,9 @@ mod test {
             Transaction::Deposit { client: 1, tx: 2, amount: 50 },
         ]);
         let account = accounts.get(&1).unwrap();
-        assert_eq!(account.available, 0);
-        assert_eq!(account.total, 0);
-        assert!(account.locked);
+        assert_eq!(account.available(), 0);
+        assert_eq!(account.total(), 0);
+        assert!(account.locked());
     }
 
     #[test]
@@ -186,9 +227,9 @@ mod test {
             Transaction::Withdrawal { client: 1, tx: 2, amount: 20 },
         ]);
         let account = accounts.get(&1).unwrap();
-        assert_eq!(account.available, 80);
-        assert_eq!(account.total, 80);
-        assert_eq!(account.held, 0);
+        assert_eq!(account.available(), 80);
+        assert_eq!(account.total(), 80);
+        assert_eq!(account.held(), 0);
     }
 
     #[test]
@@ -198,8 +239,8 @@ mod test {
             Transaction::Withdrawal { client: 1, tx: 2, amount: 200 },
         ]);
         let account = accounts.get(&1).unwrap();
-        assert_eq!(account.available, 100);
-        assert_eq!(account.total, 100);
+        assert_eq!(account.available(), 100);
+        assert_eq!(account.total(), 100);
     }
 
     #[test]
@@ -211,8 +252,8 @@ mod test {
             Transaction::Withdrawal { client: 1, tx: 2, amount: 50 },
         ]);
         let account = accounts.get(&1).unwrap();
-        assert_eq!(account.total, 0);
-        assert!(account.locked);
+        assert_eq!(account.total(), 0);
+        assert!(account.locked());
     }
 
     #[test]
@@ -222,9 +263,9 @@ mod test {
             Transaction::Dispute { client: 1, tx: 1 },
         ]);
         let account = accounts.get(&1).unwrap();
-        assert_eq!(account.available, 0);
-        assert_eq!(account.held, 100);
-        assert_eq!(account.total, 100);
+        assert_eq!(account.available(), 0);
+        assert_eq!(account.held(), 100);
+        assert_eq!(account.total(), 100);
     }
 
     #[test]
@@ -234,8 +275,8 @@ mod test {
             Transaction::Dispute { client: 2, tx: 1 },
         ]);
         let account = accounts.get(&1).unwrap();
-        assert_eq!(account.available, 100);
-        assert_eq!(account.held, 0);
+        assert_eq!(account.available(), 100);
+        assert_eq!(account.held(), 0);
     }
 
     #[test]
@@ -246,8 +287,8 @@ mod test {
             Transaction::Dispute { client: 1, tx: 1 },
         ]);
         let account = accounts.get(&1).unwrap();
-        assert_eq!(account.available, 0);
-        assert_eq!(account.held, 100);
+        assert_eq!(account.available(), 0);
+        assert_eq!(account.held(), 100);
     }
 
     #[test]
@@ -258,9 +299,9 @@ mod test {
             Transaction::Resolve { client: 1, tx: 1 },
         ]);
         let account = accounts.get(&1).unwrap();
-        assert_eq!(account.available, 100);
-        assert_eq!(account.held, 0);
-        assert_eq!(account.total, 100);
+        assert_eq!(account.available(), 100);
+        assert_eq!(account.held(), 0);
+        assert_eq!(account.total(), 100);
     }
 
     #[test]
@@ -270,8 +311,8 @@ mod test {
             Transaction::Resolve { client: 1, tx: 1 },
         ]);
         let account = accounts.get(&1).unwrap();
-        assert_eq!(account.available, 100);
-        assert_eq!(account.held, 0);
+        assert_eq!(account.available(), 100);
+        assert_eq!(account.held(), 0);
     }
 
     #[test]
@@ -282,8 +323,8 @@ mod test {
             Transaction::Resolve { client: 2, tx: 1 },
         ]);
         let account = accounts.get(&1).unwrap();
-        assert_eq!(account.available, 0);
-        assert_eq!(account.held, 100);
+        assert_eq!(account.available(), 0);
+        assert_eq!(account.held(), 100);
     }
 
     #[test]
@@ -295,8 +336,8 @@ mod test {
             Transaction::Resolve { client: 1, tx: 1 },
         ]);
         let account = accounts.get(&1).unwrap();
-        assert_eq!(account.available, 100);
-        assert_eq!(account.held, 0);
+        assert_eq!(account.available(), 100);
+        assert_eq!(account.held(), 0);
     }
 
     #[test]
@@ -307,10 +348,10 @@ mod test {
             Transaction::Chargeback { client: 1, tx: 1 },
         ]);
         let account = accounts.get(&1).unwrap();
-        assert_eq!(account.available, 0);
-        assert_eq!(account.held, 0);
-        assert_eq!(account.total, 0);
-        assert!(account.locked);
+        assert_eq!(account.available(), 0);
+        assert_eq!(account.held(), 0);
+        assert_eq!(account.total(), 0);
+        assert!(account.locked());
     }
 
     #[test]
@@ -320,7 +361,7 @@ mod test {
             Transaction::Chargeback { client: 1, tx: 1 },
         ]);
         let account = accounts.get(&1).unwrap();
-        assert!(!account.locked);
+        assert!(!account.locked());
     }
 
     #[test]
@@ -331,8 +372,8 @@ mod test {
             Transaction::Chargeback { client: 2, tx: 1 },
         ]);
         let account = accounts.get(&1).unwrap();
-        assert_eq!(account.held, 100);
-        assert!(!account.locked);
+        assert_eq!(account.held(), 100);
+        assert!(!account.locked());
     }
 
     #[test]
@@ -344,8 +385,8 @@ mod test {
             Transaction::Chargeback { client: 1, tx: 1 },
         ]);
         let account = accounts.get(&1).unwrap();
-        assert_eq!(account.held, 0);
-        assert_eq!(account.total, 0);
-        assert!(account.locked);
+        assert_eq!(account.held(), 0);
+        assert_eq!(account.total(), 0);
+        assert!(account.locked());
     }
 }
