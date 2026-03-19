@@ -1,48 +1,7 @@
 use std::collections::HashMap;
 
+use crate::account::Account;
 use crate::transaction::{Transaction, TransactionRecord, TransactionState};
-
-/// Monetary amounts are stored as integer units of 0.0001 (4 decimal places).
-/// e.g. 1.2345 is represented as 12345.
-pub struct Account {
-    client: u16,
-    available: i64,
-    held: u64,
-    total: u64,
-    locked: bool,
-}
-
-impl Account {
-    fn new(client: u16) -> Self {
-        Self {
-            client,
-            available: 0,
-            held: 0,
-            total: 0,
-            locked: false,
-        }
-    }
-
-    pub fn client(&self) -> u16 {
-        self.client
-    }
-
-    pub fn available(&self) -> i64 {
-        self.available
-    }
-
-    pub fn held(&self) -> u64 {
-        self.held
-    }
-
-    pub fn total(&self) -> u64 {
-        self.total
-    }
-
-    pub fn locked(&self) -> bool {
-        self.locked
-    }
-}
 
 pub struct Processor {
     accounts: HashMap<u16, Account>,
@@ -86,9 +45,7 @@ impl Processor {
             .accounts
             .entry(client)
             .or_insert_with(|| Account::new(client));
-        if !account.locked {
-            account.available += amount as i64;
-            account.total += amount;
+        if account.deposit(amount).is_ok() {
             self.records.insert(
                 tx,
                 TransactionRecord {
@@ -105,9 +62,7 @@ impl Processor {
             .accounts
             .entry(client)
             .or_insert_with(|| Account::new(client));
-        if !account.locked && account.available >= amount as i64 {
-            account.available -= amount as i64;
-            account.total -= amount;
+        if account.withdraw(amount).is_ok() {
             self.records.insert(
                 tx,
                 TransactionRecord {
@@ -125,8 +80,7 @@ impl Processor {
             && record.state.is_disputable()
             && let Some(account) = self.accounts.get_mut(&client)
         {
-            account.available -= record.amount as i64;
-            account.held += record.amount;
+            account.hold(record.amount);
             record.state = TransactionState::Disputed;
         }
     }
@@ -137,8 +91,7 @@ impl Processor {
             && record.state.is_resolvable()
             && let Some(account) = self.accounts.get_mut(&client)
         {
-            account.available += record.amount as i64;
-            account.held -= record.amount;
+            account.release(record.amount);
             record.state = TransactionState::Resolved;
         }
     }
@@ -149,9 +102,7 @@ impl Processor {
             && record.state.is_chargebackable()
             && let Some(account) = self.accounts.get_mut(&client)
         {
-            account.held -= record.amount;
-            account.total -= record.amount;
-            account.locked = true;
+            account.chargeback(record.amount);
             record.state = TransactionState::Chargedback;
         }
     }
@@ -160,7 +111,7 @@ impl Processor {
 #[cfg(test)]
 mod test {
     use super::Processor;
-    use super::Account;
+    use crate::account::Account;
     use crate::transaction::Transaction;
 
     fn process(transactions: Vec<Transaction>) -> HashMap<u16, Account> {
@@ -389,4 +340,5 @@ mod test {
         assert_eq!(account.total(), 0);
         assert!(account.locked());
     }
+
 }
