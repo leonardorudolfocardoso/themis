@@ -37,6 +37,20 @@ enum TransactionState {
     Chargedback,
 }
 
+impl TransactionState {
+    fn is_disputable(&self) -> bool {
+        matches!(self, TransactionState::Valid)
+    }
+
+    fn is_resolvable(&self) -> bool {
+        matches!(self, TransactionState::Disputed)
+    }
+
+    fn is_chargebackable(&self) -> bool {
+        matches!(self, TransactionState::Disputed)
+    }
+}
+
 struct TransactionRecord {
     client: u16,
     amount: u64,
@@ -44,17 +58,106 @@ struct TransactionRecord {
 }
 
 pub struct Processor {
+    accounts: HashMap<u16, Account>,
     records: HashMap<u32, TransactionRecord>,
 }
 
 impl Processor {
     pub fn new() -> Self {
         Self {
+            accounts: HashMap::new(),
             records: HashMap::new(),
         }
     }
 
-    pub fn process(&self) -> HashMap<u16, Account> {
+    pub fn process(&mut self, transactions: impl Iterator<Item = Transaction>) {
+        for transaction in transactions {
+            match transaction {
+                Transaction::Deposit { client, tx, amount } => self.deposit(client, tx, amount),
+                Transaction::Withdrawal { client, tx, amount } => self.withdraw(client, tx, amount),
+                Transaction::Dispute { client, tx } => self.dispute(client, tx),
+                Transaction::Resolve { client, tx } => self.resolve(client, tx),
+                Transaction::Chargeback { client, tx } => self.chargeback(client, tx),
+            }
+        }
+    }
+
+    pub fn accounts(&self) -> &HashMap<u16, Account> {
+        &self.accounts
+    }
+
+    fn deposit(&mut self, client: u16, tx: u32, amount: u64) {
+        let account = self
+            .accounts
+            .entry(client)
+            .or_insert_with(|| Account::new(client));
+        if !account.locked {
+            account.available += amount as i64;
+            account.total += amount;
+            self.records.insert(
+                tx,
+                TransactionRecord {
+                    client,
+                    amount,
+                    state: TransactionState::Valid,
+                },
+            );
+        }
+    }
+
+    fn withdraw(&mut self, client: u16, tx: u32, amount: u64) {
         todo!()
+    }
+
+    fn dispute(&mut self, client: u16, tx: u32) {
+        todo!()
+    }
+
+    fn resolve(&mut self, client: u16, tx: u32) {
+        todo!()
+    }
+
+    fn chargeback(&mut self, client: u16, tx: u32) {
+        todo!()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::{Processor, Transaction};
+
+    fn setup() -> Processor {
+        let mut processor = Processor::new();
+        processor.process(
+            vec![Transaction::Deposit {
+                client: 1,
+                tx: 1,
+                amount: 100,
+            }]
+            .into_iter(),
+        );
+        processor
+    }
+
+    #[test]
+    fn test_deposit_increases_available_and_total() {
+        let processor = setup();
+        let account = processor.accounts().get(&1).unwrap();
+        assert_eq!(account.available, 100);
+        assert_eq!(account.total, 100);
+        assert_eq!(account.held, 0);
+        assert!(!account.locked);
+    }
+
+    #[test]
+    fn test_deposit_on_locked_account_is_ignored() {
+        let mut processor = setup();
+        processor.dispute(1, 1);
+        processor.chargeback(1, 1);
+        processor.deposit(1, 2, 50);
+        let account = processor.accounts().get(&1).unwrap();
+        assert_eq!(account.available, 0);
+        assert_eq!(account.total, 0);
+        assert!(account.locked);
     }
 }
