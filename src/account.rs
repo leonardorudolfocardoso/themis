@@ -4,7 +4,6 @@ pub struct Account {
     client: u16,
     available: i64,
     held: u64,
-    total: i64,
     locked: bool,
 }
 
@@ -20,7 +19,6 @@ impl Account {
             client,
             available: 0,
             held: 0,
-            total: 0,
             locked: false,
         }
     }
@@ -38,7 +36,7 @@ impl Account {
     }
 
     pub fn total(&self) -> i64 {
-        self.total
+        self.available + self.held as i64
     }
 
     pub fn locked(&self) -> bool {
@@ -50,7 +48,6 @@ impl Account {
             return Err(AccountError::Locked);
         }
         self.available += amount as i64;
-        self.total += amount as i64;
         Ok(())
     }
 
@@ -62,7 +59,6 @@ impl Account {
             return Err(AccountError::InsufficientFunds);
         }
         self.available -= amount as i64;
-        self.total -= amount as i64;
         Ok(())
     }
 
@@ -78,7 +74,6 @@ impl Account {
 
     pub(crate) fn chargeback(&mut self, amount: u64) {
         self.held -= amount;
-        self.total -= amount as i64;
         self.locked = true;
     }
 }
