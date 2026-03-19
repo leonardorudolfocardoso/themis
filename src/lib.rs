@@ -149,7 +149,16 @@ impl Processor {
     }
 
     fn chargeback(&mut self, client: u16, tx: u32) {
-        todo!()
+        if let Some(record) = self.records.get_mut(&tx)
+            && record.client == client
+            && record.state.is_chargebackable()
+            && let Some(account) = self.accounts.get_mut(&client)
+        {
+            account.held -= record.amount;
+            account.total -= record.amount;
+            account.locked = true;
+            record.state = TransactionState::Chargedback;
+        }
     }
 }
 
@@ -278,6 +287,48 @@ mod test {
         let account = processor.accounts().get(&1).unwrap();
         assert_eq!(account.available, 100);
         assert_eq!(account.held, 0);
+    }
+
+    #[test]
+    fn test_chargeback_locks_account_and_decreases_held_and_total() {
+        let mut processor = setup();
+        processor.dispute(1, 1);
+        processor.chargeback(1, 1);
+        let account = processor.accounts().get(&1).unwrap();
+        assert_eq!(account.available, 0);
+        assert_eq!(account.held, 0);
+        assert_eq!(account.total, 0);
+        assert!(account.locked);
+    }
+
+    #[test]
+    fn test_chargeback_without_dispute_is_ignored() {
+        let mut processor = setup();
+        processor.chargeback(1, 1);
+        let account = processor.accounts().get(&1).unwrap();
+        assert!(!account.locked);
+    }
+
+    #[test]
+    fn test_chargeback_on_wrong_client_is_ignored() {
+        let mut processor = setup();
+        processor.dispute(1, 1);
+        processor.chargeback(2, 1);
+        let account = processor.accounts().get(&1).unwrap();
+        assert_eq!(account.held, 100);
+        assert!(!account.locked);
+    }
+
+    #[test]
+    fn test_chargeback_on_already_chargedback_is_ignored() {
+        let mut processor = setup();
+        processor.dispute(1, 1);
+        processor.chargeback(1, 1);
+        processor.chargeback(1, 1);
+        let account = processor.accounts().get(&1).unwrap();
+        assert_eq!(account.held, 0);
+        assert_eq!(account.total, 0);
+        assert!(account.locked);
     }
 
     #[test]
