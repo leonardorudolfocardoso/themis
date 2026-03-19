@@ -1,3 +1,1 @@
-mod lib;
-
 fn main() {}
