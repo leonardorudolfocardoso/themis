@@ -341,4 +341,35 @@ mod test {
         assert!(account.locked());
     }
 
+    #[test]
+    fn test_resolve_after_withdrawal_is_correct() {
+        // Deposit 100, withdraw 80 (total=20), dispute the deposit, resolve.
+        let accounts = process(vec![
+            Transaction::Deposit { client: 1, tx: 1, amount: 100 },
+            Transaction::Withdrawal { client: 1, tx: 2, amount: 80 },
+            Transaction::Dispute { client: 1, tx: 1 },
+            Transaction::Resolve { client: 1, tx: 1 },
+        ]);
+        let account = accounts.get(&1).unwrap();
+        assert_eq!(account.available(), 20);
+        assert_eq!(account.held(), 0);
+        assert_eq!(account.total(), 20);
+    }
+
+    #[test]
+    fn test_chargeback_of_deposit_after_withdrawal_total_is_negative() {
+        // Deposit 100, withdraw 80 (total=20), dispute the deposit, chargeback.
+        // total = 20 - 100 = -80: the account owes the bank the withdrawn funds.
+        let accounts = process(vec![
+            Transaction::Deposit { client: 1, tx: 1, amount: 100 },
+            Transaction::Withdrawal { client: 1, tx: 2, amount: 80 },
+            Transaction::Dispute { client: 1, tx: 1 },
+            Transaction::Chargeback { client: 1, tx: 1 },
+        ]);
+        let account = accounts.get(&1).unwrap();
+        assert_eq!(account.available(), -80);
+        assert_eq!(account.held(), 0);
+        assert_eq!(account.total(), -80);
+        assert!(account.locked());
+    }
 }

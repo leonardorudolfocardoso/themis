@@ -4,7 +4,7 @@ pub struct Account {
     client: u16,
     available: i64,
     held: u64,
-    total: u64,
+    total: i64,
     locked: bool,
 }
 
@@ -37,7 +37,7 @@ impl Account {
         self.held
     }
 
-    pub fn total(&self) -> u64 {
+    pub fn total(&self) -> i64 {
         self.total
     }
 
@@ -50,7 +50,7 @@ impl Account {
             return Err(AccountError::Locked);
         }
         self.available += amount as i64;
-        self.total += amount;
+        self.total += amount as i64;
         Ok(())
     }
 
@@ -62,7 +62,7 @@ impl Account {
             return Err(AccountError::InsufficientFunds);
         }
         self.available -= amount as i64;
-        self.total -= amount;
+        self.total -= amount as i64;
         Ok(())
     }
 
@@ -78,7 +78,7 @@ impl Account {
 
     pub(crate) fn chargeback(&mut self, amount: u64) {
         self.held -= amount;
-        self.total -= amount;
+        self.total -= amount as i64;
         self.locked = true;
     }
 }
@@ -163,6 +163,21 @@ mod test {
         account.chargeback(100);
         assert_eq!(account.held(), 0);
         assert_eq!(account.total(), 0);
+        assert!(account.locked());
+    }
+
+    #[test]
+    fn test_chargeback_after_withdrawal_total_is_negative() {
+        // Deposit 100, withdraw 80 (total=20), hold 100, chargeback 100.
+        // total = 20 - 100 = -80: the account owes the bank the withdrawn funds.
+        let mut account = Account::new(1);
+        account.deposit(100).unwrap();
+        account.withdraw(80).unwrap();
+        account.hold(100);
+        account.chargeback(100);
+        assert_eq!(account.available(), -80);
+        assert_eq!(account.held(), 0);
+        assert_eq!(account.total(), -80);
         assert!(account.locked());
     }
 }
