@@ -47,23 +47,31 @@ pub enum Transaction {
     Chargeback { client: u16, tx: u32 },
 }
 
+enum TransactionState {
+    Valid,
+    Disputed,
+    Resolved,
+    Chargedback,
+}
+
+struct TransactionRecord {
+    client: u16,
+    amount: u64,
+    state: TransactionState,
+}
+
 pub struct Processor {
-    transactions: Vec<Transaction>,
+    records: HashMap<u32, TransactionRecord>,
 }
 
 impl Processor {
     pub fn new() -> Self {
         Self {
-            transactions: Vec::new(),
+            records: HashMap::new(),
         }
     }
 
-    pub fn ingest(&mut self, transaction: Transaction) {
-        self.transactions.push(transaction);
-    }
-
-    pub fn accounts(&self) -> HashMap<u16, Account> {
+    pub fn process(&self) -> HashMap<u16, Account> {
         todo!()
     }
 }
-
