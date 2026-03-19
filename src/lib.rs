@@ -76,18 +76,19 @@ impl Processor {
     ) -> HashMap<u16, Account> {
         for transaction in transactions {
             match transaction {
-                Transaction::Deposit { client, tx, amount } if !self.records.contains_key(&tx) => {
-                    self.deposit(client, tx, amount)
+                Transaction::Deposit { client, tx, amount } => {
+                    if !self.records.contains_key(&tx) {
+                        self.deposit(client, tx, amount)
+                    }
                 }
-                Transaction::Withdrawal { client, tx, amount }
-                    if !self.records.contains_key(&tx) =>
-                {
-                    self.withdraw(client, tx, amount)
+                Transaction::Withdrawal { client, tx, amount } => {
+                    if !self.records.contains_key(&tx) {
+                        self.withdraw(client, tx, amount)
+                    }
                 }
                 Transaction::Dispute { client, tx } => self.dispute(client, tx),
                 Transaction::Resolve { client, tx } => self.resolve(client, tx),
                 Transaction::Chargeback { client, tx } => self.chargeback(client, tx),
-                _ => {}
             }
         }
         self.accounts
