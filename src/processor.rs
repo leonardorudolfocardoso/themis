@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use crate::account::Account;
+use crate::amount::Amount;
 use crate::event::{Event, TransactionKind, TransactionRecord, TransactionState};
 
 pub struct Processor {
@@ -40,7 +41,7 @@ impl Processor {
         self.accounts
     }
 
-    fn deposit(&mut self, client: u16, tx: u32, amount: u64) {
+    fn deposit(&mut self, client: u16, tx: u32, amount: Amount) {
         let account = self
             .accounts
             .entry(client)
@@ -58,7 +59,7 @@ impl Processor {
         }
     }
 
-    fn withdraw(&mut self, client: u16, tx: u32, amount: u64) {
+    fn withdraw(&mut self, client: u16, tx: u32, amount: Amount) {
         let account = self
             .accounts
             .entry(client)
@@ -114,6 +115,7 @@ impl Processor {
 mod test {
     use super::Processor;
     use crate::account::Account;
+    use crate::amount::Amount;
     use crate::event::Event;
 
     fn process(transactions: Vec<Event>) -> HashMap<u16, Account> {
@@ -127,7 +129,7 @@ mod test {
         let accounts = process(vec![Event::Deposit {
             client: 1,
             tx: 1,
-            amount: 100,
+            amount: Amount::from(100),
         }]);
         let account = accounts.get(&1).unwrap();
         assert_eq!(account.available(), 100);
@@ -139,8 +141,8 @@ mod test {
     #[test]
     fn test_duplicate_tx_id_is_ignored() {
         let accounts = process(vec![
-            Event::Deposit { client: 1, tx: 1, amount: 100 },
-            Event::Deposit { client: 1, tx: 1, amount: 999 },
+            Event::Deposit { client: 1, tx: 1, amount: Amount::from(100) },
+            Event::Deposit { client: 1, tx: 1, amount: Amount::from(999) },
         ]);
         let account = accounts.get(&1).unwrap();
         assert_eq!(account.available(), 100);
@@ -150,9 +152,9 @@ mod test {
     #[test]
     fn test_duplicate_withdrawal_tx_id_is_ignored() {
         let accounts = process(vec![
-            Event::Deposit { client: 1, tx: 1, amount: 100 },
-            Event::Withdrawal { client: 1, tx: 2, amount: 20 },
-            Event::Withdrawal { client: 1, tx: 2, amount: 20 },
+            Event::Deposit { client: 1, tx: 1, amount: Amount::from(100) },
+            Event::Withdrawal { client: 1, tx: 2, amount: Amount::from(20) },
+            Event::Withdrawal { client: 1, tx: 2, amount: Amount::from(20) },
         ]);
         let account = accounts.get(&1).unwrap();
         assert_eq!(account.available(), 80);
@@ -162,10 +164,10 @@ mod test {
     #[test]
     fn test_deposit_on_locked_account_is_ignored() {
         let accounts = process(vec![
-            Event::Deposit { client: 1, tx: 1, amount: 100 },
+            Event::Deposit { client: 1, tx: 1, amount: Amount::from(100) },
             Event::Dispute { client: 1, tx: 1 },
             Event::Chargeback { client: 1, tx: 1 },
-            Event::Deposit { client: 1, tx: 2, amount: 50 },
+            Event::Deposit { client: 1, tx: 2, amount: Amount::from(50) },
         ]);
         let account = accounts.get(&1).unwrap();
         assert_eq!(account.available(), 0);
@@ -176,8 +178,8 @@ mod test {
     #[test]
     fn test_withdraw_decreases_available_and_total() {
         let accounts = process(vec![
-            Event::Deposit { client: 1, tx: 1, amount: 100 },
-            Event::Withdrawal { client: 1, tx: 2, amount: 20 },
+            Event::Deposit { client: 1, tx: 1, amount: Amount::from(100) },
+            Event::Withdrawal { client: 1, tx: 2, amount: Amount::from(20) },
         ]);
         let account = accounts.get(&1).unwrap();
         assert_eq!(account.available(), 80);
@@ -188,8 +190,8 @@ mod test {
     #[test]
     fn test_withdraw_insufficient_funds_is_silently_ignored() {
         let accounts = process(vec![
-            Event::Deposit { client: 1, tx: 1, amount: 100 },
-            Event::Withdrawal { client: 1, tx: 2, amount: 200 },
+            Event::Deposit { client: 1, tx: 1, amount: Amount::from(100) },
+            Event::Withdrawal { client: 1, tx: 2, amount: Amount::from(200) },
         ]);
         let account = accounts.get(&1).unwrap();
         assert_eq!(account.available(), 100);
@@ -199,10 +201,10 @@ mod test {
     #[test]
     fn test_withdraw_locked_is_silently_ignored() {
         let accounts = process(vec![
-            Event::Deposit { client: 1, tx: 1, amount: 100 },
+            Event::Deposit { client: 1, tx: 1, amount: Amount::from(100) },
             Event::Dispute { client: 1, tx: 1 },
             Event::Chargeback { client: 1, tx: 1 },
-            Event::Withdrawal { client: 1, tx: 2, amount: 50 },
+            Event::Withdrawal { client: 1, tx: 2, amount: Amount::from(50) },
         ]);
         let account = accounts.get(&1).unwrap();
         assert_eq!(account.total(), 0);
@@ -212,8 +214,8 @@ mod test {
     #[test]
     fn test_dispute_on_withdrawal_is_ignored() {
         let accounts = process(vec![
-            Event::Deposit { client: 1, tx: 1, amount: 100 },
-            Event::Withdrawal { client: 1, tx: 2, amount: 40 },
+            Event::Deposit { client: 1, tx: 1, amount: Amount::from(100) },
+            Event::Withdrawal { client: 1, tx: 2, amount: Amount::from(40) },
             Event::Dispute { client: 1, tx: 2 },
         ]);
         let account = accounts.get(&1).unwrap();
@@ -224,7 +226,7 @@ mod test {
     #[test]
     fn test_dispute_decreases_available_and_increases_held() {
         let accounts = process(vec![
-            Event::Deposit { client: 1, tx: 1, amount: 100 },
+            Event::Deposit { client: 1, tx: 1, amount: Amount::from(100) },
             Event::Dispute { client: 1, tx: 1 },
         ]);
         let account = accounts.get(&1).unwrap();
@@ -236,7 +238,7 @@ mod test {
     #[test]
     fn test_dispute_on_wrong_client_is_ignored() {
         let accounts = process(vec![
-            Event::Deposit { client: 1, tx: 1, amount: 100 },
+            Event::Deposit { client: 1, tx: 1, amount: Amount::from(100) },
             Event::Dispute { client: 2, tx: 1 },
         ]);
         let account = accounts.get(&1).unwrap();
@@ -247,7 +249,7 @@ mod test {
     #[test]
     fn test_dispute_on_invalid_state_is_ignored() {
         let accounts = process(vec![
-            Event::Deposit { client: 1, tx: 1, amount: 100 },
+            Event::Deposit { client: 1, tx: 1, amount: Amount::from(100) },
             Event::Dispute { client: 1, tx: 1 },
             Event::Dispute { client: 1, tx: 1 },
         ]);
@@ -259,7 +261,7 @@ mod test {
     #[test]
     fn test_resolve_decreases_held_and_increases_available() {
         let accounts = process(vec![
-            Event::Deposit { client: 1, tx: 1, amount: 100 },
+            Event::Deposit { client: 1, tx: 1, amount: Amount::from(100) },
             Event::Dispute { client: 1, tx: 1 },
             Event::Resolve { client: 1, tx: 1 },
         ]);
@@ -272,7 +274,7 @@ mod test {
     #[test]
     fn test_resolve_without_dispute_is_ignored() {
         let accounts = process(vec![
-            Event::Deposit { client: 1, tx: 1, amount: 100 },
+            Event::Deposit { client: 1, tx: 1, amount: Amount::from(100) },
             Event::Resolve { client: 1, tx: 1 },
         ]);
         let account = accounts.get(&1).unwrap();
@@ -283,7 +285,7 @@ mod test {
     #[test]
     fn test_resolve_on_wrong_client_is_ignored() {
         let accounts = process(vec![
-            Event::Deposit { client: 1, tx: 1, amount: 100 },
+            Event::Deposit { client: 1, tx: 1, amount: Amount::from(100) },
             Event::Dispute { client: 1, tx: 1 },
             Event::Resolve { client: 2, tx: 1 },
         ]);
@@ -295,7 +297,7 @@ mod test {
     #[test]
     fn test_resolve_on_already_resolved_is_ignored() {
         let accounts = process(vec![
-            Event::Deposit { client: 1, tx: 1, amount: 100 },
+            Event::Deposit { client: 1, tx: 1, amount: Amount::from(100) },
             Event::Dispute { client: 1, tx: 1 },
             Event::Resolve { client: 1, tx: 1 },
             Event::Resolve { client: 1, tx: 1 },
@@ -308,7 +310,7 @@ mod test {
     #[test]
     fn test_chargeback_locks_account_and_decreases_held_and_total() {
         let accounts = process(vec![
-            Event::Deposit { client: 1, tx: 1, amount: 100 },
+            Event::Deposit { client: 1, tx: 1, amount: Amount::from(100) },
             Event::Dispute { client: 1, tx: 1 },
             Event::Chargeback { client: 1, tx: 1 },
         ]);
@@ -322,7 +324,7 @@ mod test {
     #[test]
     fn test_chargeback_without_dispute_is_ignored() {
         let accounts = process(vec![
-            Event::Deposit { client: 1, tx: 1, amount: 100 },
+            Event::Deposit { client: 1, tx: 1, amount: Amount::from(100) },
             Event::Chargeback { client: 1, tx: 1 },
         ]);
         let account = accounts.get(&1).unwrap();
@@ -332,7 +334,7 @@ mod test {
     #[test]
     fn test_chargeback_on_wrong_client_is_ignored() {
         let accounts = process(vec![
-            Event::Deposit { client: 1, tx: 1, amount: 100 },
+            Event::Deposit { client: 1, tx: 1, amount: Amount::from(100) },
             Event::Dispute { client: 1, tx: 1 },
             Event::Chargeback { client: 2, tx: 1 },
         ]);
@@ -344,7 +346,7 @@ mod test {
     #[test]
     fn test_chargeback_on_already_chargedback_is_ignored() {
         let accounts = process(vec![
-            Event::Deposit { client: 1, tx: 1, amount: 100 },
+            Event::Deposit { client: 1, tx: 1, amount: Amount::from(100) },
             Event::Dispute { client: 1, tx: 1 },
             Event::Chargeback { client: 1, tx: 1 },
             Event::Chargeback { client: 1, tx: 1 },
@@ -359,8 +361,8 @@ mod test {
     fn test_resolve_after_withdrawal_is_correct() {
         // Deposit 100, withdraw 80 (total=20), dispute the deposit, resolve.
         let accounts = process(vec![
-            Event::Deposit { client: 1, tx: 1, amount: 100 },
-            Event::Withdrawal { client: 1, tx: 2, amount: 80 },
+            Event::Deposit { client: 1, tx: 1, amount: Amount::from(100) },
+            Event::Withdrawal { client: 1, tx: 2, amount: Amount::from(80) },
             Event::Dispute { client: 1, tx: 1 },
             Event::Resolve { client: 1, tx: 1 },
         ]);
@@ -375,8 +377,8 @@ mod test {
         // Deposit 100, withdraw 80 (total=20), dispute the deposit, chargeback.
         // total = 20 - 100 = -80: the account owes the bank the withdrawn funds.
         let accounts = process(vec![
-            Event::Deposit { client: 1, tx: 1, amount: 100 },
-            Event::Withdrawal { client: 1, tx: 2, amount: 80 },
+            Event::Deposit { client: 1, tx: 1, amount: Amount::from(100) },
+            Event::Withdrawal { client: 1, tx: 2, amount: Amount::from(80) },
             Event::Dispute { client: 1, tx: 1 },
             Event::Chargeback { client: 1, tx: 1 },
         ]);

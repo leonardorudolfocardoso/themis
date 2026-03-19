@@ -1,5 +1,6 @@
 use serde::Deserialize;
 
+use crate::amount::Amount;
 use crate::event::Event;
 
 #[derive(Deserialize)]
@@ -18,8 +19,8 @@ impl TryFrom<RawEvent> for Event {
         let client = row.client;
         let tx = row.tx;
         match row.kind.as_str() {
-            "deposit" => Ok(Event::Deposit { client, tx, amount: to_amount(row.amount.ok_or(())?).ok_or(())? }),
-            "withdrawal" => Ok(Event::Withdrawal { client, tx, amount: to_amount(row.amount.ok_or(())?).ok_or(())? }),
+            "deposit" => Ok(Event::Deposit { client, tx, amount: Amount::try_from(row.amount.ok_or(())?)? }),
+            "withdrawal" => Ok(Event::Withdrawal { client, tx, amount: Amount::try_from(row.amount.ok_or(())?)? }),
             "dispute" => Ok(Event::Dispute { client, tx }),
             "resolve" => Ok(Event::Resolve { client, tx }),
             "chargeback" => Ok(Event::Chargeback { client, tx }),
@@ -37,16 +38,11 @@ pub fn from_reader(reader: impl std::io::Read) -> impl Iterator<Item = Event> {
         .filter_map(|r| r.try_into().ok())
 }
 
-fn to_amount(f: f64) -> Option<u64> {
-    if f < 0.0 {
-        return None;
-    }
-    Some((f * 10000.0).round() as u64)
-}
 
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::amount::Amount;
     use crate::event::Event;
 
     fn parse(input: &str) -> Vec<Event> {
@@ -56,13 +52,15 @@ mod test {
     #[test]
     fn test_parse_deposit() {
         let events = parse("type,client,tx,amount\ndeposit,1,1,1.5");
-        assert!(matches!(events[0], Event::Deposit { client: 1, tx: 1, amount: 15000 }));
+        assert!(matches!(events[0], Event::Deposit { client: 1, tx: 1, .. }));
+        assert_eq!(if let Event::Deposit { amount, .. } = events[0] { amount } else { unreachable!() }, Amount::from(15000));
     }
 
     #[test]
     fn test_parse_withdrawal() {
         let events = parse("type,client,tx,amount\nwithdrawal,2,3,0.0001");
-        assert!(matches!(events[0], Event::Withdrawal { client: 2, tx: 3, amount: 1 }));
+        assert!(matches!(events[0], Event::Withdrawal { client: 2, tx: 3, .. }));
+        assert_eq!(if let Event::Withdrawal { amount, .. } = events[0] { amount } else { unreachable!() }, Amount::from(1));
     }
 
     #[test]
@@ -93,31 +91,8 @@ mod test {
     #[test]
     fn test_whitespace_is_trimmed() {
         let events = parse("type, client, tx, amount\n deposit , 1 , 1 , 1.5 ");
-        assert!(matches!(events[0], Event::Deposit { client: 1, tx: 1, amount: 15000 }));
+        assert!(matches!(events[0], Event::Deposit { client: 1, tx: 1, .. }));
+        assert_eq!(if let Event::Deposit { amount, .. } = events[0] { amount } else { unreachable!() }, Amount::from(15000));
     }
 
-    #[test]
-    fn test_amount_four_decimals() {
-        assert_eq!(to_amount(1.2345), Some(12345));
-    }
-
-    #[test]
-    fn test_amount_fewer_decimals() {
-        assert_eq!(to_amount(1.5), Some(15000));
-    }
-
-    #[test]
-    fn test_amount_no_decimal() {
-        assert_eq!(to_amount(100.0), Some(1000000));
-    }
-
-    #[test]
-    fn test_amount_minimum() {
-        assert_eq!(to_amount(0.0001), Some(1));
-    }
-
-    #[test]
-    fn test_negative_amount_is_rejected() {
-        assert_eq!(to_amount(-1.0), None);
-    }
 }
