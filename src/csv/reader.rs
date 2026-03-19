@@ -3,7 +3,7 @@ use serde::Deserialize;
 use crate::event::Event;
 
 #[derive(Deserialize)]
-struct CsvRow {
+struct RawEvent {
     #[serde(rename = "type")]
     kind: String,
     client: u16,
@@ -11,10 +11,10 @@ struct CsvRow {
     amount: Option<f64>,
 }
 
-impl TryFrom<CsvRow> for Event {
+impl TryFrom<RawEvent> for Event {
     type Error = ();
 
-    fn try_from(row: CsvRow) -> Result<Self, Self::Error> {
+    fn try_from(row: RawEvent) -> Result<Self, Self::Error> {
         let client = row.client;
         let tx = row.tx;
         match row.kind.as_str() {
@@ -33,7 +33,7 @@ pub fn from_reader(reader: impl std::io::Read) -> impl Iterator<Item = Event> {
         .trim(csv::Trim::All)
         .from_reader(reader)
         .into_deserialize()
-        .filter_map(|r: Result<CsvRow, _>| r.ok())
+        .filter_map(|r: Result<RawEvent, _>| r.ok())
         .filter_map(|r| r.try_into().ok())
 }
 
