@@ -4,10 +4,10 @@ use std::collections::HashMap;
 /// e.g. 1.2345 is represented as 12345.
 pub struct Account {
     pub client: u16,
-    pub available: i64,
-    pub held: u64,
-    pub total: u64,
-    pub locked: bool,
+    available: i64,
+    held: u64,
+    total: u64,
+    locked: bool,
 }
 
 impl Account {
