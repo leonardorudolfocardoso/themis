@@ -70,7 +70,7 @@ impl Processor {
         }
     }
 
-    pub fn process(&mut self, transactions: impl Iterator<Item = Transaction>) {
+    pub fn process(mut self, transactions: impl Iterator<Item = Transaction>) -> HashMap<u16, Account> {
         for transaction in transactions {
             match transaction {
                 Transaction::Deposit { client, tx, amount } => self.deposit(client, tx, amount),
@@ -80,10 +80,7 @@ impl Processor {
                 Transaction::Chargeback { client, tx } => self.chargeback(client, tx),
             }
         }
-    }
-
-    pub fn accounts(&self) -> &HashMap<u16, Account> {
-        &self.accounts
+        self.accounts
     }
 
     fn deposit(&mut self, client: u16, tx: u32, amount: u64) {
@@ -166,23 +163,16 @@ impl Processor {
 mod test {
     use super::{Processor, Transaction};
 
-    fn setup() -> Processor {
-        let mut processor = Processor::new();
-        processor.process(
-            vec![Transaction::Deposit {
-                client: 1,
-                tx: 1,
-                amount: 100,
-            }]
-            .into_iter(),
-        );
-        processor
+    fn process(transactions: Vec<Transaction>) -> std::collections::HashMap<u16, super::Account> {
+        Processor::new().process(transactions.into_iter())
     }
 
     #[test]
     fn test_deposit_increases_available_and_total() {
-        let processor = setup();
-        let account = processor.accounts().get(&1).unwrap();
+        let accounts = process(vec![
+            Transaction::Deposit { client: 1, tx: 1, amount: 100 },
+        ]);
+        let account = accounts.get(&1).unwrap();
         assert_eq!(account.available, 100);
         assert_eq!(account.total, 100);
         assert_eq!(account.held, 0);
@@ -190,10 +180,26 @@ mod test {
     }
 
     #[test]
+    fn test_deposit_on_locked_account_is_ignored() {
+        let accounts = process(vec![
+            Transaction::Deposit { client: 1, tx: 1, amount: 100 },
+            Transaction::Dispute { client: 1, tx: 1 },
+            Transaction::Chargeback { client: 1, tx: 1 },
+            Transaction::Deposit { client: 1, tx: 2, amount: 50 },
+        ]);
+        let account = accounts.get(&1).unwrap();
+        assert_eq!(account.available, 0);
+        assert_eq!(account.total, 0);
+        assert!(account.locked);
+    }
+
+    #[test]
     fn test_withdraw_decreases_available_and_total() {
-        let mut processor = setup();
-        processor.withdraw(1, 2, 20);
-        let account = processor.accounts().get(&1).unwrap();
+        let accounts = process(vec![
+            Transaction::Deposit { client: 1, tx: 1, amount: 100 },
+            Transaction::Withdrawal { client: 1, tx: 2, amount: 20 },
+        ]);
+        let account = accounts.get(&1).unwrap();
         assert_eq!(account.available, 80);
         assert_eq!(account.total, 80);
         assert_eq!(account.held, 0);
@@ -201,29 +207,35 @@ mod test {
 
     #[test]
     fn test_withdraw_insufficient_funds_is_silently_ignored() {
-        let mut processor = setup();
-        processor.withdraw(1, 2, 200);
-        let account = processor.accounts().get(&1).unwrap();
+        let accounts = process(vec![
+            Transaction::Deposit { client: 1, tx: 1, amount: 100 },
+            Transaction::Withdrawal { client: 1, tx: 2, amount: 200 },
+        ]);
+        let account = accounts.get(&1).unwrap();
         assert_eq!(account.available, 100);
         assert_eq!(account.total, 100);
     }
 
     #[test]
     fn test_withdraw_locked_is_silently_ignored() {
-        let mut processor = setup();
-        processor.dispute(1, 1);
-        processor.chargeback(1, 1);
-        processor.withdraw(1, 2, 50);
-        let account = processor.accounts().get(&1).unwrap();
+        let accounts = process(vec![
+            Transaction::Deposit { client: 1, tx: 1, amount: 100 },
+            Transaction::Dispute { client: 1, tx: 1 },
+            Transaction::Chargeback { client: 1, tx: 1 },
+            Transaction::Withdrawal { client: 1, tx: 2, amount: 50 },
+        ]);
+        let account = accounts.get(&1).unwrap();
         assert_eq!(account.total, 0);
         assert!(account.locked);
     }
 
     #[test]
     fn test_dispute_decreases_available_and_increases_held() {
-        let mut processor = setup();
-        processor.dispute(1, 1);
-        let account = processor.accounts().get(&1).unwrap();
+        let accounts = process(vec![
+            Transaction::Deposit { client: 1, tx: 1, amount: 100 },
+            Transaction::Dispute { client: 1, tx: 1 },
+        ]);
+        let account = accounts.get(&1).unwrap();
         assert_eq!(account.available, 0);
         assert_eq!(account.held, 100);
         assert_eq!(account.total, 100);
@@ -231,29 +243,35 @@ mod test {
 
     #[test]
     fn test_dispute_on_wrong_client_is_ignored() {
-        let mut processor = setup();
-        processor.dispute(2, 1);
-        let account = processor.accounts().get(&1).unwrap();
+        let accounts = process(vec![
+            Transaction::Deposit { client: 1, tx: 1, amount: 100 },
+            Transaction::Dispute { client: 2, tx: 1 },
+        ]);
+        let account = accounts.get(&1).unwrap();
         assert_eq!(account.available, 100);
         assert_eq!(account.held, 0);
     }
 
     #[test]
     fn test_dispute_on_invalid_state_is_ignored() {
-        let mut processor = setup();
-        processor.dispute(1, 1);
-        processor.dispute(1, 1);
-        let account = processor.accounts().get(&1).unwrap();
+        let accounts = process(vec![
+            Transaction::Deposit { client: 1, tx: 1, amount: 100 },
+            Transaction::Dispute { client: 1, tx: 1 },
+            Transaction::Dispute { client: 1, tx: 1 },
+        ]);
+        let account = accounts.get(&1).unwrap();
         assert_eq!(account.available, 0);
         assert_eq!(account.held, 100);
     }
 
     #[test]
     fn test_resolve_decreases_held_and_increases_available() {
-        let mut processor = setup();
-        processor.dispute(1, 1);
-        processor.resolve(1, 1);
-        let account = processor.accounts().get(&1).unwrap();
+        let accounts = process(vec![
+            Transaction::Deposit { client: 1, tx: 1, amount: 100 },
+            Transaction::Dispute { client: 1, tx: 1 },
+            Transaction::Resolve { client: 1, tx: 1 },
+        ]);
+        let account = accounts.get(&1).unwrap();
         assert_eq!(account.available, 100);
         assert_eq!(account.held, 0);
         assert_eq!(account.total, 100);
@@ -261,40 +279,48 @@ mod test {
 
     #[test]
     fn test_resolve_without_dispute_is_ignored() {
-        let mut processor = setup();
-        processor.resolve(1, 1);
-        let account = processor.accounts().get(&1).unwrap();
+        let accounts = process(vec![
+            Transaction::Deposit { client: 1, tx: 1, amount: 100 },
+            Transaction::Resolve { client: 1, tx: 1 },
+        ]);
+        let account = accounts.get(&1).unwrap();
         assert_eq!(account.available, 100);
         assert_eq!(account.held, 0);
     }
 
     #[test]
     fn test_resolve_on_wrong_client_is_ignored() {
-        let mut processor = setup();
-        processor.dispute(1, 1);
-        processor.resolve(2, 1);
-        let account = processor.accounts().get(&1).unwrap();
+        let accounts = process(vec![
+            Transaction::Deposit { client: 1, tx: 1, amount: 100 },
+            Transaction::Dispute { client: 1, tx: 1 },
+            Transaction::Resolve { client: 2, tx: 1 },
+        ]);
+        let account = accounts.get(&1).unwrap();
         assert_eq!(account.available, 0);
         assert_eq!(account.held, 100);
     }
 
     #[test]
     fn test_resolve_on_already_resolved_is_ignored() {
-        let mut processor = setup();
-        processor.dispute(1, 1);
-        processor.resolve(1, 1);
-        processor.resolve(1, 1);
-        let account = processor.accounts().get(&1).unwrap();
+        let accounts = process(vec![
+            Transaction::Deposit { client: 1, tx: 1, amount: 100 },
+            Transaction::Dispute { client: 1, tx: 1 },
+            Transaction::Resolve { client: 1, tx: 1 },
+            Transaction::Resolve { client: 1, tx: 1 },
+        ]);
+        let account = accounts.get(&1).unwrap();
         assert_eq!(account.available, 100);
         assert_eq!(account.held, 0);
     }
 
     #[test]
     fn test_chargeback_locks_account_and_decreases_held_and_total() {
-        let mut processor = setup();
-        processor.dispute(1, 1);
-        processor.chargeback(1, 1);
-        let account = processor.accounts().get(&1).unwrap();
+        let accounts = process(vec![
+            Transaction::Deposit { client: 1, tx: 1, amount: 100 },
+            Transaction::Dispute { client: 1, tx: 1 },
+            Transaction::Chargeback { client: 1, tx: 1 },
+        ]);
+        let account = accounts.get(&1).unwrap();
         assert_eq!(account.available, 0);
         assert_eq!(account.held, 0);
         assert_eq!(account.total, 0);
@@ -303,42 +329,36 @@ mod test {
 
     #[test]
     fn test_chargeback_without_dispute_is_ignored() {
-        let mut processor = setup();
-        processor.chargeback(1, 1);
-        let account = processor.accounts().get(&1).unwrap();
+        let accounts = process(vec![
+            Transaction::Deposit { client: 1, tx: 1, amount: 100 },
+            Transaction::Chargeback { client: 1, tx: 1 },
+        ]);
+        let account = accounts.get(&1).unwrap();
         assert!(!account.locked);
     }
 
     #[test]
     fn test_chargeback_on_wrong_client_is_ignored() {
-        let mut processor = setup();
-        processor.dispute(1, 1);
-        processor.chargeback(2, 1);
-        let account = processor.accounts().get(&1).unwrap();
+        let accounts = process(vec![
+            Transaction::Deposit { client: 1, tx: 1, amount: 100 },
+            Transaction::Dispute { client: 1, tx: 1 },
+            Transaction::Chargeback { client: 2, tx: 1 },
+        ]);
+        let account = accounts.get(&1).unwrap();
         assert_eq!(account.held, 100);
         assert!(!account.locked);
     }
 
     #[test]
     fn test_chargeback_on_already_chargedback_is_ignored() {
-        let mut processor = setup();
-        processor.dispute(1, 1);
-        processor.chargeback(1, 1);
-        processor.chargeback(1, 1);
-        let account = processor.accounts().get(&1).unwrap();
+        let accounts = process(vec![
+            Transaction::Deposit { client: 1, tx: 1, amount: 100 },
+            Transaction::Dispute { client: 1, tx: 1 },
+            Transaction::Chargeback { client: 1, tx: 1 },
+            Transaction::Chargeback { client: 1, tx: 1 },
+        ]);
+        let account = accounts.get(&1).unwrap();
         assert_eq!(account.held, 0);
-        assert_eq!(account.total, 0);
-        assert!(account.locked);
-    }
-
-    #[test]
-    fn test_deposit_on_locked_account_is_ignored() {
-        let mut processor = setup();
-        processor.dispute(1, 1);
-        processor.chargeback(1, 1);
-        processor.deposit(1, 2, 50);
-        let account = processor.accounts().get(&1).unwrap();
-        assert_eq!(account.available, 0);
         assert_eq!(account.total, 0);
         assert!(account.locked);
     }
