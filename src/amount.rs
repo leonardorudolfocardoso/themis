@@ -1,8 +1,9 @@
 use std::fmt;
+use std::ops::{AddAssign, SubAssign};
 
 /// Monetary amounts are stored as integer units of 0.0001 (4 decimal places).
 /// e.g. 1.2345 is represented as 12345.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Amount(u64);
 
 impl Amount {
@@ -29,6 +30,24 @@ impl TryFrom<f64> for Amount {
             return Err(());
         }
         Ok(Amount((f * 10000.0).round() as u64))
+    }
+}
+
+impl PartialEq<u64> for Amount {
+    fn eq(&self, other: &u64) -> bool {
+        self.0 == *other
+    }
+}
+
+impl AddAssign for Amount {
+    fn add_assign(&mut self, rhs: Amount) {
+        self.0 += rhs.0;
+    }
+}
+
+impl SubAssign for Amount {
+    fn sub_assign(&mut self, rhs: Amount) {
+        self.0 -= rhs.0;
     }
 }
 

@@ -1,56 +1,58 @@
 use crate::amount::Amount;
+use crate::funds::Funds;
 
 #[derive(Debug)]
 pub(crate) enum BalanceError {
     InsufficientFunds,
 }
 
+#[derive(Default)]
 pub(crate) struct Balance {
-    available: i64,
-    held: u64,
+    available: Funds,
+    held: Amount,
 }
 
 impl Balance {
     pub(crate) fn new() -> Self {
-        Self { available: 0, held: 0 }
+        Self::default()
     }
 
-    pub fn available(&self) -> i64 {
+    pub fn available(&self) -> Funds {
         self.available
     }
 
-    pub fn held(&self) -> u64 {
+    pub fn held(&self) -> Amount {
         self.held
     }
 
-    pub fn total(&self) -> i64 {
-        self.available + self.held as i64
+    pub fn total(&self) -> Funds {
+        self.available + self.held
     }
 
     pub(crate) fn deposit(&mut self, amount: Amount) {
-        self.available += amount.as_i64();
+        self.available += amount;
     }
 
     pub(crate) fn withdraw(&mut self, amount: Amount) -> Result<(), BalanceError> {
-        if self.available < amount.as_i64() {
+        if self.available < amount {
             return Err(BalanceError::InsufficientFunds);
         }
-        self.available -= amount.as_i64();
+        self.available -= amount;
         Ok(())
     }
 
     pub(crate) fn hold(&mut self, amount: Amount) {
-        self.available -= amount.as_i64();
-        self.held += amount.as_u64();
+        self.available -= amount;
+        self.held += amount;
     }
 
     pub(crate) fn release(&mut self, amount: Amount) {
-        self.available += amount.as_i64();
-        self.held -= amount.as_u64();
+        self.available += amount;
+        self.held -= amount;
     }
 
     pub(crate) fn chargeback(&mut self, amount: Amount) {
-        self.held -= amount.as_u64();
+        self.held -= amount;
     }
 }
 
@@ -64,7 +66,7 @@ mod test {
         let mut b = Balance::new();
         b.deposit(Amount::from(100));
         assert_eq!(b.available(), 100);
-        assert_eq!(b.held(), 0);
+        assert_eq!(b.held(), Amount::from(0));
         assert_eq!(b.total(), 100);
     }
 
@@ -91,7 +93,7 @@ mod test {
         b.deposit(Amount::from(100));
         b.hold(Amount::from(40));
         assert_eq!(b.available(), 60);
-        assert_eq!(b.held(), 40);
+        assert_eq!(b.held(), Amount::from(40));
         assert_eq!(b.total(), 100);
     }
 
@@ -102,7 +104,7 @@ mod test {
         b.hold(Amount::from(40));
         b.release(Amount::from(40));
         assert_eq!(b.available(), 100);
-        assert_eq!(b.held(), 0);
+        assert_eq!(b.held(), Amount::from(0));
         assert_eq!(b.total(), 100);
     }
 
@@ -112,7 +114,7 @@ mod test {
         b.deposit(Amount::from(100));
         b.hold(Amount::from(100));
         b.chargeback(Amount::from(100));
-        assert_eq!(b.held(), 0);
+        assert_eq!(b.held(), Amount::from(0));
         assert_eq!(b.total(), 0);
     }
 
@@ -124,7 +126,7 @@ mod test {
         b.hold(Amount::from(100));
         b.chargeback(Amount::from(100));
         assert_eq!(b.available(), -80);
-        assert_eq!(b.held(), 0);
+        assert_eq!(b.held(), Amount::from(0));
         assert_eq!(b.total(), -80);
     }
 }

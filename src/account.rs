@@ -1,5 +1,6 @@
 use crate::amount::Amount;
 use crate::balance::{Balance, BalanceError};
+use crate::funds::Funds;
 
 pub struct Account {
     client: u16,
@@ -26,15 +27,15 @@ impl Account {
         self.client
     }
 
-    pub fn available(&self) -> i64 {
+    pub fn available(&self) -> Funds {
         self.balance.available()
     }
 
-    pub fn held(&self) -> u64 {
+    pub fn held(&self) -> Amount {
         self.balance.held()
     }
 
-    pub fn total(&self) -> i64 {
+    pub fn total(&self) -> Funds {
         self.balance.total()
     }
 
