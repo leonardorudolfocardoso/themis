@@ -137,7 +137,15 @@ impl Processor {
     }
 
     fn resolve(&mut self, client: u16, tx: u32) {
-        todo!()
+        if let Some(record) = self.records.get_mut(&tx)
+            && record.client == client
+            && record.state.is_resolvable()
+            && let Some(account) = self.accounts.get_mut(&client)
+        {
+            account.available += record.amount as i64;
+            account.held -= record.amount;
+            record.state = TransactionState::Resolved;
+        }
     }
 
     fn chargeback(&mut self, client: u16, tx: u32) {
@@ -229,6 +237,47 @@ mod test {
         let account = processor.accounts().get(&1).unwrap();
         assert_eq!(account.available, 0);
         assert_eq!(account.held, 100);
+    }
+
+    #[test]
+    fn test_resolve_decreases_held_and_increases_available() {
+        let mut processor = setup();
+        processor.dispute(1, 1);
+        processor.resolve(1, 1);
+        let account = processor.accounts().get(&1).unwrap();
+        assert_eq!(account.available, 100);
+        assert_eq!(account.held, 0);
+        assert_eq!(account.total, 100);
+    }
+
+    #[test]
+    fn test_resolve_without_dispute_is_ignored() {
+        let mut processor = setup();
+        processor.resolve(1, 1);
+        let account = processor.accounts().get(&1).unwrap();
+        assert_eq!(account.available, 100);
+        assert_eq!(account.held, 0);
+    }
+
+    #[test]
+    fn test_resolve_on_wrong_client_is_ignored() {
+        let mut processor = setup();
+        processor.dispute(1, 1);
+        processor.resolve(2, 1);
+        let account = processor.accounts().get(&1).unwrap();
+        assert_eq!(account.available, 0);
+        assert_eq!(account.held, 100);
+    }
+
+    #[test]
+    fn test_resolve_on_already_resolved_is_ignored() {
+        let mut processor = setup();
+        processor.dispute(1, 1);
+        processor.resolve(1, 1);
+        processor.resolve(1, 1);
+        let account = processor.accounts().get(&1).unwrap();
+        assert_eq!(account.available, 100);
+        assert_eq!(account.held, 0);
     }
 
     #[test]
