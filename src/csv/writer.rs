@@ -45,8 +45,17 @@ mod test {
     use crate::event::Event;
     use crate::processor::Processor;
 
-    fn account_with(client: u16, available: i64, held: u64, locked: bool) -> crate::account::Account {
-        let mut events: Vec<Event> = vec![Event::Deposit { client, tx: 1, amount: Amount::raw((available + held as i64) as u64) }];
+    fn account_with(
+        client: u16,
+        available: i64,
+        held: u64,
+        locked: bool,
+    ) -> crate::account::Account {
+        let mut events: Vec<Event> = vec![Event::Deposit {
+            client,
+            tx: 1,
+            amount: Amount::raw((available + held as i64) as u64),
+        }];
         if held > 0 {
             events.push(Event::Dispute { client, tx: 1 });
         }
@@ -65,7 +74,10 @@ mod test {
         let mut buf = Vec::new();
         to_writer(&mut buf, vec![account].into_iter());
         let output = String::from_utf8(buf).unwrap();
-        assert_eq!(output, "client,available,held,total,locked\n1,1.0000,0.0000,1.0000,false\n");
+        assert_eq!(
+            output,
+            "client,available,held,total,locked\n1,1.0000,0.0000,1.0000,false\n"
+        );
     }
 
     #[test]

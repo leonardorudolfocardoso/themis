@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use crate::account::Account;
 use crate::amount::Amount;
 use crate::event::Event;
-use crate::transaction::{Kind, Record, State};
 use crate::id::{ClientId, TransactionId};
+use crate::transaction::{Kind, Record, State};
 
 /// Processes a stream of transaction events and maintains account state.
 ///
