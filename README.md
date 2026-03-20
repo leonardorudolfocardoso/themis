@@ -66,26 +66,31 @@ sequenceDiagram
     participant Out as CSV Output
 
     CSV->>Reader: raw row
-    Reader->>Processor: Event (Deposit / Withdrawal)
+    Reader->>Processor: Event (Deposit / Withdrawal) or skip invalid row
+    Processor->>Records: check duplicate tx
     Processor->>Account: deposit() / withdraw()
-    Processor->>Records: store TransactionRecord
+    Processor->>Records: store record on success
 
     CSV->>Reader: raw row
     Reader->>Processor: Event (Dispute)
-    Processor->>Records: lookup record, mark Disputed
+    Processor->>Records: lookup valid deposit for same client
     Processor->>Account: hold()
+    Processor->>Records: mark Disputed on success
 
     CSV->>Reader: raw row
     Reader->>Processor: Event (Resolve)
-    Processor->>Records: lookup record, mark Resolved
+    Processor->>Records: lookup disputed record for same client
     Processor->>Account: release()
+    Processor->>Records: mark Resolved on success
 
     CSV->>Reader: raw row
     Reader->>Processor: Event (Chargeback)
-    Processor->>Records: lookup record, mark Chargedback
-    Processor->>Account: chargeback() — lock account
+    Processor->>Records: lookup disputed record for same client
+    Processor->>Account: chargeback() and lock account
+    Processor->>Records: mark Chargedback on success
 
     Processor->>Writer: accounts
+    Writer->>Writer: sort by client ID
     Writer->>Out: client, available, held, total, locked
 ```
 
