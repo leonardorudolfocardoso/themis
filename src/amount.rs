@@ -37,8 +37,8 @@ impl Amount {
         Amount(value)
     }
 
-    pub(crate) fn as_i64(self) -> i64 {
-        self.0 as i64
+    pub(crate) fn as_i128(self) -> i128 {
+        self.0 as i128
     }
 }
 

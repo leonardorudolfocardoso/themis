@@ -151,4 +151,15 @@ mod test {
             Amount::raw(15000)
         );
     }
+
+    #[test]
+    fn test_large_amount_does_not_flip_sign() {
+        let events = parse("type,client,tx,amount\ndeposit,1,1,922337203685477.5808");
+        let amount = if let Event::Deposit { amount, .. } = events[0] {
+            amount
+        } else {
+            unreachable!()
+        };
+        assert_eq!(amount.to_string(), "922337203685477.5808");
+    }
 }

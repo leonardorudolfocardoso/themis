@@ -47,4 +47,13 @@ mod test {
         assert_eq!(row("9"), "9,-1000.0000,0.0000,-1000.0000,true");
         assert_eq!(row("10"), "10,0.0000,0.0000,0.0000,true");
     }
+
+    #[test]
+    fn test_large_deposit_stays_positive() {
+        let input = b"type,client,tx,amount\ndeposit,1,1,922337203685477.5808\n";
+        let mut output = Vec::new();
+        run(input.as_slice(), &mut output);
+        let csv = String::from_utf8(output).unwrap();
+        assert!(csv.contains("1,922337203685477.5808,0.0000,922337203685477.5808,false"));
+    }
 }
