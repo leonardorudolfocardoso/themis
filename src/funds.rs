@@ -3,6 +3,11 @@ use std::ops::{Add, AddAssign, Sub, SubAssign};
 
 use crate::amount::Amount;
 
+/// Signed monetary balance used for account state.
+///
+/// Unlike [`Amount`](crate::amount::Amount), `Funds` can go negative —
+/// for example when a deposit is charged back after the funds have already
+/// been withdrawn.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct Funds(i64);
 
