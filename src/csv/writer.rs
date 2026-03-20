@@ -2,6 +2,10 @@ use serde::Serialize;
 
 use crate::account::Account;
 
+/// Serialization-ready snapshot of an account for CSV output.
+///
+/// Monetary values are formatted as decimal strings with 4 decimal places
+/// rather than floats, ensuring exact representation.
 #[derive(Serialize)]
 struct OutputRow {
     client: u16,
@@ -23,6 +27,7 @@ impl From<&Account> for OutputRow {
     }
 }
 
+/// Writes account state to `writer` as CSV, sorted by client ID.
 pub fn to_writer(writer: impl std::io::Write, accounts: impl Iterator<Item = Account>) {
     let mut accounts: Vec<Account> = accounts.collect();
     accounts.sort_by_key(|a| a.client());

@@ -3,6 +3,10 @@ use serde::Deserialize;
 use crate::amount::Amount;
 use crate::event::Event;
 
+/// Raw CSV row as deserialized by serde, before validation.
+///
+/// The `type` column is renamed to `kind` to avoid shadowing Rust's keyword.
+/// `amount` is optional because dispute, resolve, and chargeback rows omit it.
 #[derive(Deserialize)]
 struct RawEvent {
     #[serde(rename = "type")]
@@ -37,6 +41,10 @@ impl TryFrom<RawEvent> for Event {
     }
 }
 
+/// Parses a CSV stream into an iterator of [`Event`]s.
+///
+/// Rows that cannot be deserialized or converted to a known event type are
+/// silently skipped. Leading and trailing whitespace is trimmed from all fields.
 pub fn from_reader(reader: impl std::io::Read) -> impl Iterator<Item = Event> {
     csv::ReaderBuilder::new()
         .trim(csv::Trim::All)
