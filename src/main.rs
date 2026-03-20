@@ -11,3 +11,32 @@ fn main() -> Result<(), Box<dyn Error>> {
     run(File::open(path)?, io::stdout());
     Ok(())
 }
+
+#[cfg(test)]
+mod test {
+    use super::run;
+
+    #[test]
+    fn test_integration() {
+        let input = std::fs::read("tests/fixtures/transactions.csv").unwrap();
+        let mut output = Vec::new();
+        run(input.as_slice(), &mut output);
+        let csv = String::from_utf8(output).unwrap();
+        let lines: Vec<&str> = csv.lines().collect();
+
+        assert_eq!(lines[0], "client,available,held,total,locked");
+
+        let row = |client: &str| lines.iter().find(|l| l.starts_with(&format!("{},", client))).copied().unwrap();
+
+        assert_eq!(row("1"),  "1,120.0000,0.0000,120.0000,false");
+        assert_eq!(row("2"),  "2,-80.0000,0.0000,-80.0000,true");
+        assert_eq!(row("3"),  "3,100.0000,0.0000,100.0000,false");
+        assert_eq!(row("4"),  "4,10.0000,0.0000,10.0000,true");
+        assert_eq!(row("5"),  "5,1300.0000,0.0000,1300.0000,false");
+        assert_eq!(row("6"),  "6,0.0000,0.0000,0.0000,false");
+        assert_eq!(row("7"),  "7,25.5000,0.0000,25.5000,true");
+        assert_eq!(row("8"),  "8,50.0000,0.0000,50.0000,false");
+        assert_eq!(row("9"),  "9,-1000.0000,0.0000,-1000.0000,true");
+        assert_eq!(row("10"), "10,0.0000,0.0000,0.0000,true");
+    }
+}
