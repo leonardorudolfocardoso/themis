@@ -7,18 +7,17 @@ use std::ops::{AddAssign, SubAssign};
 pub struct Amount(u64);
 
 impl Amount {
-    pub fn as_u64(self) -> u64 {
+    #[cfg(test)]
+    pub(crate) fn raw(value: u64) -> Self {
+        Amount(value)
+    }
+
+    pub(crate) fn as_u64(self) -> u64 {
         self.0
     }
 
-    pub fn as_i64(self) -> i64 {
+    pub(crate) fn as_i64(self) -> i64 {
         self.0 as i64
-    }
-}
-
-impl From<u64> for Amount {
-    fn from(value: u64) -> Self {
-        Amount(value)
     }
 }
 
@@ -30,12 +29,6 @@ impl TryFrom<f64> for Amount {
             return Err(());
         }
         Ok(Amount((f * 10000.0).round() as u64))
-    }
-}
-
-impl PartialEq<u64> for Amount {
-    fn eq(&self, other: &u64) -> bool {
-        self.0 == *other
     }
 }
 

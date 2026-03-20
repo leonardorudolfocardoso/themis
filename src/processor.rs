@@ -125,12 +125,12 @@ mod test {
         let accounts = process(vec![Event::Deposit {
             client: 1,
             tx: 1,
-            amount: Amount::from(100),
+            amount: Amount::raw(100),
         }]);
         let account = accounts.get(&1).unwrap();
         assert_eq!(account.available(), 100);
         assert_eq!(account.total(), 100);
-        assert_eq!(account.held(), 0);
+        assert_eq!(account.held(), Amount::default());
         assert!(!account.locked());
     }
 
@@ -140,12 +140,12 @@ mod test {
             Event::Deposit {
                 client: 1,
                 tx: 1,
-                amount: Amount::from(100),
+                amount: Amount::raw(100),
             },
             Event::Deposit {
                 client: 1,
                 tx: 1,
-                amount: Amount::from(999),
+                amount: Amount::raw(999),
             },
         ]);
         let account = accounts.get(&1).unwrap();
@@ -159,17 +159,17 @@ mod test {
             Event::Deposit {
                 client: 1,
                 tx: 1,
-                amount: Amount::from(100),
+                amount: Amount::raw(100),
             },
             Event::Withdrawal {
                 client: 1,
                 tx: 2,
-                amount: Amount::from(20),
+                amount: Amount::raw(20),
             },
             Event::Withdrawal {
                 client: 1,
                 tx: 2,
-                amount: Amount::from(20),
+                amount: Amount::raw(20),
             },
         ]);
         let account = accounts.get(&1).unwrap();
@@ -183,14 +183,14 @@ mod test {
             Event::Deposit {
                 client: 1,
                 tx: 1,
-                amount: Amount::from(100),
+                amount: Amount::raw(100),
             },
             Event::Dispute { client: 1, tx: 1 },
             Event::Chargeback { client: 1, tx: 1 },
             Event::Deposit {
                 client: 1,
                 tx: 2,
-                amount: Amount::from(50),
+                amount: Amount::raw(50),
             },
         ]);
         let account = accounts.get(&1).unwrap();
@@ -205,18 +205,18 @@ mod test {
             Event::Deposit {
                 client: 1,
                 tx: 1,
-                amount: Amount::from(100),
+                amount: Amount::raw(100),
             },
             Event::Withdrawal {
                 client: 1,
                 tx: 2,
-                amount: Amount::from(20),
+                amount: Amount::raw(20),
             },
         ]);
         let account = accounts.get(&1).unwrap();
         assert_eq!(account.available(), 80);
         assert_eq!(account.total(), 80);
-        assert_eq!(account.held(), 0);
+        assert_eq!(account.held(), Amount::default());
     }
 
     #[test]
@@ -225,12 +225,12 @@ mod test {
             Event::Deposit {
                 client: 1,
                 tx: 1,
-                amount: Amount::from(100),
+                amount: Amount::raw(100),
             },
             Event::Withdrawal {
                 client: 1,
                 tx: 2,
-                amount: Amount::from(200),
+                amount: Amount::raw(200),
             },
         ]);
         let account = accounts.get(&1).unwrap();
@@ -244,14 +244,14 @@ mod test {
             Event::Deposit {
                 client: 1,
                 tx: 1,
-                amount: Amount::from(100),
+                amount: Amount::raw(100),
             },
             Event::Dispute { client: 1, tx: 1 },
             Event::Chargeback { client: 1, tx: 1 },
             Event::Withdrawal {
                 client: 1,
                 tx: 2,
-                amount: Amount::from(50),
+                amount: Amount::raw(50),
             },
         ]);
         let account = accounts.get(&1).unwrap();
@@ -265,18 +265,18 @@ mod test {
             Event::Deposit {
                 client: 1,
                 tx: 1,
-                amount: Amount::from(100),
+                amount: Amount::raw(100),
             },
             Event::Withdrawal {
                 client: 1,
                 tx: 2,
-                amount: Amount::from(40),
+                amount: Amount::raw(40),
             },
             Event::Dispute { client: 1, tx: 2 },
         ]);
         let account = accounts.get(&1).unwrap();
         assert_eq!(account.available(), 60);
-        assert_eq!(account.held(), 0);
+        assert_eq!(account.held(), Amount::default());
     }
 
     #[test]
@@ -285,13 +285,13 @@ mod test {
             Event::Deposit {
                 client: 1,
                 tx: 1,
-                amount: Amount::from(100),
+                amount: Amount::raw(100),
             },
             Event::Dispute { client: 1, tx: 1 },
         ]);
         let account = accounts.get(&1).unwrap();
         assert_eq!(account.available(), 0);
-        assert_eq!(account.held(), 100);
+        assert_eq!(account.held(), Amount::raw(100));
         assert_eq!(account.total(), 100);
     }
 
@@ -301,13 +301,13 @@ mod test {
             Event::Deposit {
                 client: 1,
                 tx: 1,
-                amount: Amount::from(100),
+                amount: Amount::raw(100),
             },
             Event::Dispute { client: 2, tx: 1 },
         ]);
         let account = accounts.get(&1).unwrap();
         assert_eq!(account.available(), 100);
-        assert_eq!(account.held(), 0);
+        assert_eq!(account.held(), Amount::default());
     }
 
     #[test]
@@ -316,14 +316,14 @@ mod test {
             Event::Deposit {
                 client: 1,
                 tx: 1,
-                amount: Amount::from(100),
+                amount: Amount::raw(100),
             },
             Event::Dispute { client: 1, tx: 1 },
             Event::Dispute { client: 1, tx: 1 },
         ]);
         let account = accounts.get(&1).unwrap();
         assert_eq!(account.available(), 0);
-        assert_eq!(account.held(), 100);
+        assert_eq!(account.held(), Amount::raw(100));
     }
 
     #[test]
@@ -332,14 +332,14 @@ mod test {
             Event::Deposit {
                 client: 1,
                 tx: 1,
-                amount: Amount::from(100),
+                amount: Amount::raw(100),
             },
             Event::Dispute { client: 1, tx: 1 },
             Event::Resolve { client: 1, tx: 1 },
         ]);
         let account = accounts.get(&1).unwrap();
         assert_eq!(account.available(), 100);
-        assert_eq!(account.held(), 0);
+        assert_eq!(account.held(), Amount::default());
         assert_eq!(account.total(), 100);
     }
 
@@ -349,13 +349,13 @@ mod test {
             Event::Deposit {
                 client: 1,
                 tx: 1,
-                amount: Amount::from(100),
+                amount: Amount::raw(100),
             },
             Event::Resolve { client: 1, tx: 1 },
         ]);
         let account = accounts.get(&1).unwrap();
         assert_eq!(account.available(), 100);
-        assert_eq!(account.held(), 0);
+        assert_eq!(account.held(), Amount::default());
     }
 
     #[test]
@@ -364,14 +364,14 @@ mod test {
             Event::Deposit {
                 client: 1,
                 tx: 1,
-                amount: Amount::from(100),
+                amount: Amount::raw(100),
             },
             Event::Dispute { client: 1, tx: 1 },
             Event::Resolve { client: 2, tx: 1 },
         ]);
         let account = accounts.get(&1).unwrap();
         assert_eq!(account.available(), 0);
-        assert_eq!(account.held(), 100);
+        assert_eq!(account.held(), Amount::raw(100));
     }
 
     #[test]
@@ -380,7 +380,7 @@ mod test {
             Event::Deposit {
                 client: 1,
                 tx: 1,
-                amount: Amount::from(100),
+                amount: Amount::raw(100),
             },
             Event::Dispute { client: 1, tx: 1 },
             Event::Resolve { client: 1, tx: 1 },
@@ -388,7 +388,7 @@ mod test {
         ]);
         let account = accounts.get(&1).unwrap();
         assert_eq!(account.available(), 100);
-        assert_eq!(account.held(), 0);
+        assert_eq!(account.held(), Amount::default());
     }
 
     #[test]
@@ -397,14 +397,14 @@ mod test {
             Event::Deposit {
                 client: 1,
                 tx: 1,
-                amount: Amount::from(100),
+                amount: Amount::raw(100),
             },
             Event::Dispute { client: 1, tx: 1 },
             Event::Chargeback { client: 1, tx: 1 },
         ]);
         let account = accounts.get(&1).unwrap();
         assert_eq!(account.available(), 0);
-        assert_eq!(account.held(), 0);
+        assert_eq!(account.held(), Amount::default());
         assert_eq!(account.total(), 0);
         assert!(account.locked());
     }
@@ -415,7 +415,7 @@ mod test {
             Event::Deposit {
                 client: 1,
                 tx: 1,
-                amount: Amount::from(100),
+                amount: Amount::raw(100),
             },
             Event::Chargeback { client: 1, tx: 1 },
         ]);
@@ -429,13 +429,13 @@ mod test {
             Event::Deposit {
                 client: 1,
                 tx: 1,
-                amount: Amount::from(100),
+                amount: Amount::raw(100),
             },
             Event::Dispute { client: 1, tx: 1 },
             Event::Chargeback { client: 2, tx: 1 },
         ]);
         let account = accounts.get(&1).unwrap();
-        assert_eq!(account.held(), 100);
+        assert_eq!(account.held(), Amount::raw(100));
         assert!(!account.locked());
     }
 
@@ -445,14 +445,14 @@ mod test {
             Event::Deposit {
                 client: 1,
                 tx: 1,
-                amount: Amount::from(100),
+                amount: Amount::raw(100),
             },
             Event::Dispute { client: 1, tx: 1 },
             Event::Chargeback { client: 1, tx: 1 },
             Event::Chargeback { client: 1, tx: 1 },
         ]);
         let account = accounts.get(&1).unwrap();
-        assert_eq!(account.held(), 0);
+        assert_eq!(account.held(), Amount::default());
         assert_eq!(account.total(), 0);
         assert!(account.locked());
     }
@@ -464,19 +464,19 @@ mod test {
             Event::Deposit {
                 client: 1,
                 tx: 1,
-                amount: Amount::from(100),
+                amount: Amount::raw(100),
             },
             Event::Withdrawal {
                 client: 1,
                 tx: 2,
-                amount: Amount::from(80),
+                amount: Amount::raw(80),
             },
             Event::Dispute { client: 1, tx: 1 },
             Event::Resolve { client: 1, tx: 1 },
         ]);
         let account = accounts.get(&1).unwrap();
         assert_eq!(account.available(), 20);
-        assert_eq!(account.held(), 0);
+        assert_eq!(account.held(), Amount::default());
         assert_eq!(account.total(), 20);
     }
 
@@ -488,19 +488,19 @@ mod test {
             Event::Deposit {
                 client: 1,
                 tx: 1,
-                amount: Amount::from(100),
+                amount: Amount::raw(100),
             },
             Event::Withdrawal {
                 client: 1,
                 tx: 2,
-                amount: Amount::from(80),
+                amount: Amount::raw(80),
             },
             Event::Dispute { client: 1, tx: 1 },
             Event::Chargeback { client: 1, tx: 1 },
         ]);
         let account = accounts.get(&1).unwrap();
         assert_eq!(account.available(), -80);
-        assert_eq!(account.held(), 0);
+        assert_eq!(account.held(), Amount::default());
         assert_eq!(account.total(), -80);
         assert!(account.locked());
     }

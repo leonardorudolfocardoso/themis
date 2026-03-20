@@ -73,7 +73,7 @@ mod test {
             } else {
                 unreachable!()
             },
-            Amount::from(15000)
+            Amount::raw(15000)
         );
     }
 
@@ -94,7 +94,7 @@ mod test {
             } else {
                 unreachable!()
             },
-            Amount::from(1)
+            Amount::raw(1)
         );
     }
 
@@ -140,7 +140,7 @@ mod test {
             } else {
                 unreachable!()
             },
-            Amount::from(15000)
+            Amount::raw(15000)
         );
     }
 }

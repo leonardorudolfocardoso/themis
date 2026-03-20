@@ -41,7 +41,7 @@ mod test {
     use crate::processor::Processor;
 
     fn account_with(client: u16, available: i64, held: u64, locked: bool) -> crate::account::Account {
-        let mut events: Vec<Event> = vec![Event::Deposit { client, tx: 1, amount: Amount::from((available + held as i64) as u64) }];
+        let mut events: Vec<Event> = vec![Event::Deposit { client, tx: 1, amount: Amount::raw((available + held as i64) as u64) }];
         if held > 0 {
             events.push(Event::Dispute { client, tx: 1 });
         }
