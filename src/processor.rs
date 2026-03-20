@@ -15,7 +15,7 @@ use crate::transaction::{Kind, Record, State};
 /// - Only deposits can be disputed; disputes on withdrawals are ignored.
 /// - Disputes, resolves, and chargebacks must reference a transaction
 ///   belonging to the same client.
-/// - Operations on locked accounts are silently ignored.
+/// - All operations on locked accounts are silently ignored.
 #[derive(Default)]
 pub struct Processor {
     accounts: HashMap<ClientId, Account>,
@@ -93,8 +93,8 @@ impl Processor {
             && record.client == client
             && record.is_disputable()
             && let Some(account) = self.accounts.get_mut(&client)
+            && account.hold(record.amount).is_ok()
         {
-            account.hold(record.amount);
             record.state = State::Disputed;
         }
     }
@@ -104,8 +104,8 @@ impl Processor {
             && record.client == client
             && record.state.is_resolvable()
             && let Some(account) = self.accounts.get_mut(&client)
+            && account.release(record.amount).is_ok()
         {
-            account.release(record.amount);
             record.state = State::Resolved;
         }
     }
@@ -115,8 +115,8 @@ impl Processor {
             && record.client == client
             && record.state.is_chargebackable()
             && let Some(account) = self.accounts.get_mut(&client)
+            && account.chargeback(record.amount).is_ok()
         {
-            account.chargeback(record.amount);
             record.state = State::Chargedback;
         }
     }
@@ -339,6 +339,30 @@ mod test {
         let account = accounts.get(&1).unwrap();
         assert_eq!(account.available(), 0);
         assert_eq!(account.held(), Amount::raw(100));
+    }
+
+    #[test]
+    fn test_dispute_on_locked_account_is_ignored() {
+        let accounts = process(vec![
+            Event::Deposit {
+                client: 1,
+                tx: 1,
+                amount: Amount::raw(100),
+            },
+            Event::Deposit {
+                client: 1,
+                tx: 2,
+                amount: Amount::raw(50),
+            },
+            Event::Dispute { client: 1, tx: 1 },
+            Event::Chargeback { client: 1, tx: 1 },
+            Event::Dispute { client: 1, tx: 2 },
+        ]);
+        let account = accounts.get(&1).unwrap();
+        assert_eq!(account.available(), 50);
+        assert_eq!(account.held(), Amount::default());
+        assert_eq!(account.total(), 50);
+        assert!(account.locked());
     }
 
     #[test]

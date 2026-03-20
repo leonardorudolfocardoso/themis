@@ -15,14 +15,12 @@ pub(crate) enum AccountError {
 /// Represents a client account with a balance and a locked state.
 ///
 /// An `Account` wraps a `Balance` and enforces one additional invariant:
-/// a locked account rejects all deposits and withdrawals. Locking happens
+/// a locked account rejects all mutations. Locking happens
 /// permanently after a chargeback and cannot be undone.
 ///
 /// Two distinct states govern fund availability:
 /// - **Frozen funds** — temporarily unavailable for withdrawal; reversible via `release`.
-/// - **Locked account** — permanently rejects all deposits and withdrawals; set by `chargeback`.
-///
-/// Freezing and releasing bypass the lock — they occur before a chargeback decision is made.
+/// - **Locked account** — permanently rejects all account mutations; set by `chargeback`.
 pub struct Account {
     /// The client this account belongs to.
     client: ClientId,
@@ -93,23 +91,35 @@ impl Account {
 
     /// Moves `amount` from available to held.
     /// Freezes `amount`, preventing it from being withdrawn.
-    pub(crate) fn hold(&mut self, amount: Amount) {
+    pub(crate) fn hold(&mut self, amount: Amount) -> Result<(), AccountError> {
+        if self.locked {
+            return Err(AccountError::Locked);
+        }
         self.balance.hold(amount);
+        Ok(())
     }
 
     /// Unfreezes `amount`, making it available for withdrawal again.
-    pub(crate) fn release(&mut self, amount: Amount) {
+    pub(crate) fn release(&mut self, amount: Amount) -> Result<(), AccountError> {
+        if self.locked {
+            return Err(AccountError::Locked);
+        }
         self.balance.release(amount);
+        Ok(())
     }
 
     /// Permanently deducts the `amount` previously frozen by [`Account::hold`] and locks the
-    /// account, rejecting all future deposits and withdrawals.
+    /// account, rejecting all future mutations.
     ///
     /// Can leave the available balance negative if funds were withdrawn before
     /// the freeze.
-    pub(crate) fn chargeback(&mut self, amount: Amount) {
+    pub(crate) fn chargeback(&mut self, amount: Amount) -> Result<(), AccountError> {
+        if self.locked {
+            return Err(AccountError::Locked);
+        }
         self.balance.chargeback(amount);
         self.locked = true;
+        Ok(())
     }
 }
 
@@ -131,8 +141,8 @@ mod test {
     fn test_deposit_on_locked_account_returns_error() {
         let mut account = Account::new(1);
         account.deposit(Amount::raw(100)).unwrap();
-        account.hold(Amount::raw(100));
-        account.chargeback(Amount::raw(100));
+        account.hold(Amount::raw(100)).unwrap();
+        account.chargeback(Amount::raw(100)).unwrap();
         assert!(matches!(
             account.deposit(Amount::raw(50)),
             Err(AccountError::Locked)
@@ -166,8 +176,8 @@ mod test {
     fn test_withdraw_on_locked_account_returns_error() {
         let mut account = Account::new(1);
         account.deposit(Amount::raw(100)).unwrap();
-        account.hold(Amount::raw(100));
-        account.chargeback(Amount::raw(100));
+        account.hold(Amount::raw(100)).unwrap();
+        account.chargeback(Amount::raw(100)).unwrap();
         assert!(matches!(
             account.withdraw(Amount::raw(50)),
             Err(AccountError::Locked)
@@ -178,7 +188,7 @@ mod test {
     fn test_hold_moves_available_to_held() {
         let mut account = Account::new(1);
         account.deposit(Amount::raw(100)).unwrap();
-        account.hold(Amount::raw(40));
+        account.hold(Amount::raw(40)).unwrap();
         assert_eq!(account.available(), 60);
         assert_eq!(account.held(), Amount::raw(40));
         assert_eq!(account.total(), 100);
@@ -188,8 +198,8 @@ mod test {
     fn test_release_moves_held_to_available() {
         let mut account = Account::new(1);
         account.deposit(Amount::raw(100)).unwrap();
-        account.hold(Amount::raw(40));
-        account.release(Amount::raw(40));
+        account.hold(Amount::raw(40)).unwrap();
+        account.release(Amount::raw(40)).unwrap();
         assert_eq!(account.available(), 100);
         assert_eq!(account.held(), Amount::default());
         assert_eq!(account.total(), 100);
@@ -199,8 +209,8 @@ mod test {
     fn test_chargeback_removes_held_and_total_and_locks() {
         let mut account = Account::new(1);
         account.deposit(Amount::raw(100)).unwrap();
-        account.hold(Amount::raw(100));
-        account.chargeback(Amount::raw(100));
+        account.hold(Amount::raw(100)).unwrap();
+        account.chargeback(Amount::raw(100)).unwrap();
         assert_eq!(account.held(), Amount::default());
         assert_eq!(account.total(), 0);
         assert!(account.locked());
@@ -213,11 +223,47 @@ mod test {
         let mut account = Account::new(1);
         account.deposit(Amount::raw(100)).unwrap();
         account.withdraw(Amount::raw(80)).unwrap();
-        account.hold(Amount::raw(100));
-        account.chargeback(Amount::raw(100));
+        account.hold(Amount::raw(100)).unwrap();
+        account.chargeback(Amount::raw(100)).unwrap();
         assert_eq!(account.available(), -80);
         assert_eq!(account.held(), Amount::default());
         assert_eq!(account.total(), -80);
         assert!(account.locked());
+    }
+
+    #[test]
+    fn test_hold_on_locked_account_returns_error() {
+        let mut account = Account::new(1);
+        account.deposit(Amount::raw(100)).unwrap();
+        account.hold(Amount::raw(100)).unwrap();
+        account.chargeback(Amount::raw(100)).unwrap();
+        assert!(matches!(
+            account.hold(Amount::raw(10)),
+            Err(AccountError::Locked)
+        ));
+    }
+
+    #[test]
+    fn test_release_on_locked_account_returns_error() {
+        let mut account = Account::new(1);
+        account.deposit(Amount::raw(100)).unwrap();
+        account.hold(Amount::raw(100)).unwrap();
+        account.chargeback(Amount::raw(100)).unwrap();
+        assert!(matches!(
+            account.release(Amount::raw(10)),
+            Err(AccountError::Locked)
+        ));
+    }
+
+    #[test]
+    fn test_chargeback_on_locked_account_returns_error() {
+        let mut account = Account::new(1);
+        account.deposit(Amount::raw(100)).unwrap();
+        account.hold(Amount::raw(100)).unwrap();
+        account.chargeback(Amount::raw(100)).unwrap();
+        assert!(matches!(
+            account.chargeback(Amount::raw(10)),
+            Err(AccountError::Locked)
+        ));
     }
 }
