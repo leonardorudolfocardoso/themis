@@ -6,6 +6,7 @@ mod event;
 mod funds;
 mod id;
 mod processor;
+mod transaction;
 
 pub use account::Account;
 pub use amount::Amount;

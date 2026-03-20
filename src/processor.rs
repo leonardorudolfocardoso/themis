@@ -2,13 +2,14 @@ use std::collections::HashMap;
 
 use crate::account::Account;
 use crate::amount::Amount;
-use crate::event::{Event, TransactionKind, TransactionRecord, TransactionState};
+use crate::event::Event;
+use crate::transaction::{Kind, Record, State};
 use crate::id::{ClientId, TransactionId};
 
 #[derive(Default)]
 pub struct Processor {
     accounts: HashMap<ClientId, Account>,
-    records: HashMap<TransactionId, TransactionRecord>,
+    records: HashMap<TransactionId, Record>,
 }
 
 impl Processor {
@@ -45,11 +46,11 @@ impl Processor {
         if account.deposit(amount).is_ok() {
             self.records.insert(
                 tx,
-                TransactionRecord {
+                Record {
                     client,
                     amount,
-                    kind: TransactionKind::Deposit,
-                    state: TransactionState::Valid,
+                    kind: Kind::Deposit,
+                    state: State::Valid,
                 },
             );
         }
@@ -63,11 +64,11 @@ impl Processor {
         if account.withdraw(amount).is_ok() {
             self.records.insert(
                 tx,
-                TransactionRecord {
+                Record {
                     client,
                     amount,
-                    kind: TransactionKind::Withdrawal,
-                    state: TransactionState::Valid,
+                    kind: Kind::Withdrawal,
+                    state: State::Valid,
                 },
             );
         }
@@ -80,7 +81,7 @@ impl Processor {
             && let Some(account) = self.accounts.get_mut(&client)
         {
             account.hold(record.amount);
-            record.state = TransactionState::Disputed;
+            record.state = State::Disputed;
         }
     }
 
@@ -91,7 +92,7 @@ impl Processor {
             && let Some(account) = self.accounts.get_mut(&client)
         {
             account.release(record.amount);
-            record.state = TransactionState::Resolved;
+            record.state = State::Resolved;
         }
     }
 
@@ -102,7 +103,7 @@ impl Processor {
             && let Some(account) = self.accounts.get_mut(&client)
         {
             account.chargeback(record.amount);
-            record.state = TransactionState::Chargedback;
+            record.state = State::Chargedback;
         }
     }
 }
