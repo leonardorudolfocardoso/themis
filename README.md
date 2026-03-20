@@ -101,3 +101,12 @@ cargo test       # run all tests
 cargo clippy     # lint
 cargo fmt        # format
 ```
+
+## AI Disclosure
+
+AI tools used: OpenAI Codex and Anthropic Claude.
+
+They were used as pair-programming and review aids to sanity-check
+implementation details, review documentation, and help surface edge cases and
+wording issues. Final technical decisions, validation, and submitted changes
+were my own.
