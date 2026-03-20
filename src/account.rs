@@ -90,7 +90,9 @@ impl Account {
     }
 
     /// Moves `amount` from available to held.
-    /// Freezes `amount`, preventing it from being withdrawn.
+    /// Freezes `amount` of the account's funds, preventing withdrawal.
+    ///
+    /// Returns [`AccountError::Locked`] if the account is locked.
     pub(crate) fn hold(&mut self, amount: Amount) -> Result<(), AccountError> {
         if self.locked {
             return Err(AccountError::Locked);
@@ -100,6 +102,8 @@ impl Account {
     }
 
     /// Unfreezes `amount`, making it available for withdrawal again.
+    ///
+    /// Returns [`AccountError::Locked`] if the account is locked.
     pub(crate) fn release(&mut self, amount: Amount) -> Result<(), AccountError> {
         if self.locked {
             return Err(AccountError::Locked);
