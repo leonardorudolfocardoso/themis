@@ -1,9 +1,10 @@
 use crate::amount::Amount;
 use crate::balance::{Balance, BalanceError};
 use crate::funds::Funds;
+use crate::id::ClientId;
 
 pub struct Account {
-    client: u16,
+    client: ClientId,
     balance: Balance,
     locked: bool,
 }

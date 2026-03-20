@@ -3,10 +3,11 @@ use std::collections::HashMap;
 use crate::account::Account;
 use crate::amount::Amount;
 use crate::event::{Event, TransactionKind, TransactionRecord, TransactionState};
+use crate::id::{AccountId, TransactionId};
 
 pub struct Processor {
-    accounts: HashMap<u16, Account>,
-    records: HashMap<u32, TransactionRecord>,
+    accounts: HashMap<AccountId, Account>,
+    records: HashMap<TransactionId, TransactionRecord>,
 }
 
 impl Processor {

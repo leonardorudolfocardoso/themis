@@ -1,11 +1,31 @@
-use crate::amount::Amount;
+use crate::{
+    amount::Amount,
+    id::{ClientId, TransactionId},
+};
 
 pub enum Event {
-    Deposit { client: u16, tx: u32, amount: Amount },
-    Withdrawal { client: u16, tx: u32, amount: Amount },
-    Dispute { client: u16, tx: u32 },
-    Resolve { client: u16, tx: u32 },
-    Chargeback { client: u16, tx: u32 },
+    Deposit {
+        client: ClientId,
+        tx: TransactionId,
+        amount: Amount,
+    },
+    Withdrawal {
+        client: ClientId,
+        tx: TransactionId,
+        amount: Amount,
+    },
+    Dispute {
+        client: ClientId,
+        tx: TransactionId,
+    },
+    Resolve {
+        client: ClientId,
+        tx: TransactionId,
+    },
+    Chargeback {
+        client: ClientId,
+        tx: TransactionId,
+    },
 }
 
 pub(crate) enum TransactionState {
@@ -35,7 +55,7 @@ pub(crate) enum TransactionKind {
 }
 
 pub(crate) struct TransactionRecord {
-    pub(crate) client: u16,
+    pub(crate) client: ClientId,
     pub(crate) amount: Amount,
     pub(crate) kind: TransactionKind,
     pub(crate) state: TransactionState,

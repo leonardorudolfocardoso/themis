@@ -4,6 +4,7 @@ mod balance;
 mod csv;
 mod event;
 mod funds;
+mod id;
 mod processor;
 
 pub use account::Account;
