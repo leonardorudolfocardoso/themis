@@ -6,6 +6,16 @@ use crate::event::Event;
 use crate::transaction::{Kind, Record, State};
 use crate::id::{ClientId, TransactionId};
 
+/// Processes a stream of transaction events and maintains account state.
+///
+/// `Processor` applies each [`Event`] to the corresponding [`Account`],
+/// enforcing all transaction rules:
+///
+/// - Duplicate transaction IDs are silently ignored.
+/// - Only deposits can be disputed; disputes on withdrawals are ignored.
+/// - Disputes, resolves, and chargebacks must reference a transaction
+///   belonging to the same client.
+/// - Operations on locked accounts are silently ignored.
 #[derive(Default)]
 pub struct Processor {
     accounts: HashMap<ClientId, Account>,
@@ -13,10 +23,14 @@ pub struct Processor {
 }
 
 impl Processor {
+    /// Creates a new processor with no accounts or transaction history.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Consumes all events from `transactions` and returns the final account state.
+    ///
+    /// Each client account is created on first deposit or withdrawal.
     pub fn process(mut self, transactions: impl Iterator<Item = Event>) -> HashMap<u16, Account> {
         for transaction in transactions {
             match transaction {
