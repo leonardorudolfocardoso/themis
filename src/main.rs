@@ -1,7 +1,13 @@
-use std::io;
+use std::{env, error::Error, fs::File, io};
 use themis::{Processor, from_reader, to_writer};
 
-fn main() {
-    let accounts = Processor::new().process(from_reader(io::stdin()));
-    to_writer(io::stdout(), accounts.into_values());
+fn run(input: impl io::Read, output: impl io::Write) {
+    let accounts = Processor::new().process(from_reader(input));
+    to_writer(output, accounts.into_values());
+}
+
+fn main() -> Result<(), Box<dyn Error>> {
+    let path = env::args().nth(1).ok_or("usage: themis <transactions.csv>")?;
+    run(File::open(path)?, io::stdout());
+    Ok(())
 }
