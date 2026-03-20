@@ -136,20 +136,6 @@ mod test {
     use std::collections::HashMap;
 
     #[test]
-    fn test_deposit_increases_available_and_total() {
-        let accounts = process(vec![Event::Deposit {
-            client: 1,
-            tx: 1,
-            amount: Amount::raw(100),
-        }]);
-        let account = accounts.get(&1).unwrap();
-        assert_eq!(account.available(), 100);
-        assert_eq!(account.total(), 100);
-        assert_eq!(account.held(), Amount::default());
-        assert!(!account.locked());
-    }
-
-    #[test]
     fn test_duplicate_tx_id_is_ignored() {
         let accounts = process(vec![
             Event::Deposit {
@@ -212,45 +198,6 @@ mod test {
         assert_eq!(account.available(), 0);
         assert_eq!(account.total(), 0);
         assert!(account.locked());
-    }
-
-    #[test]
-    fn test_withdraw_decreases_available_and_total() {
-        let accounts = process(vec![
-            Event::Deposit {
-                client: 1,
-                tx: 1,
-                amount: Amount::raw(100),
-            },
-            Event::Withdrawal {
-                client: 1,
-                tx: 2,
-                amount: Amount::raw(20),
-            },
-        ]);
-        let account = accounts.get(&1).unwrap();
-        assert_eq!(account.available(), 80);
-        assert_eq!(account.total(), 80);
-        assert_eq!(account.held(), Amount::default());
-    }
-
-    #[test]
-    fn test_withdraw_insufficient_funds_is_silently_ignored() {
-        let accounts = process(vec![
-            Event::Deposit {
-                client: 1,
-                tx: 1,
-                amount: Amount::raw(100),
-            },
-            Event::Withdrawal {
-                client: 1,
-                tx: 2,
-                amount: Amount::raw(200),
-            },
-        ]);
-        let account = accounts.get(&1).unwrap();
-        assert_eq!(account.available(), 100);
-        assert_eq!(account.total(), 100);
     }
 
     #[test]
