@@ -12,10 +12,6 @@ impl Amount {
         Amount(value)
     }
 
-    pub(crate) fn as_u64(self) -> u64 {
-        self.0
-    }
-
     pub(crate) fn as_i64(self) -> i64 {
         self.0 as i64
     }
