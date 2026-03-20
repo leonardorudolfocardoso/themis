@@ -5,6 +5,7 @@ use crate::amount::Amount;
 use crate::event::{Event, TransactionKind, TransactionRecord, TransactionState};
 use crate::id::{AccountId, TransactionId};
 
+#[derive(Default)]
 pub struct Processor {
     accounts: HashMap<AccountId, Account>,
     records: HashMap<TransactionId, TransactionRecord>,
@@ -12,10 +13,7 @@ pub struct Processor {
 
 impl Processor {
     pub fn new() -> Self {
-        Self {
-            accounts: HashMap::new(),
-            records: HashMap::new(),
-        }
+        Self::default()
     }
 
     pub fn process(
