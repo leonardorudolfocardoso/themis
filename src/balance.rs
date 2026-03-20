@@ -1,38 +1,61 @@
 use crate::amount::Amount;
 use crate::funds::Funds;
 
+/// Error type for balance operations.
 #[derive(Debug)]
 pub(crate) enum BalanceError {
+    /// The requested withdrawal exceeds the available funds.
     InsufficientFunds,
 }
 
+/// Holds the monetary state of an account.
+///
+/// `Balance` tracks available funds and held funds separately. Held funds
+/// cannot be withdrawn until they are released or removed.
+///
+/// `total` is always derived as `available + held` and is never stored
+/// independently, preventing inconsistency.
+///
+/// Note: `available` can go negative after held funds are removed following
+/// a prior withdrawal.
 #[derive(Default)]
 pub(crate) struct Balance {
+    /// Funds available for withdrawal. Can go negative.
     available: Funds,
+    /// Funds currently held and unavailable for withdrawal.
     held: Amount,
 }
 
 impl Balance {
+    /// Creates a new balance with zero available and zero held.
     pub(crate) fn new() -> Self {
         Self::default()
     }
 
+    /// Returns the funds available for withdrawal.
     pub fn available(&self) -> Funds {
         self.available
     }
 
+    /// Returns the funds currently held.
     pub fn held(&self) -> Amount {
         self.held
     }
 
+    /// Returns the total balance (`available + held`).
     pub fn total(&self) -> Funds {
         self.available + self.held
     }
 
+    /// Increases available funds by `amount`.
     pub(crate) fn deposit(&mut self, amount: Amount) {
         self.available += amount;
     }
 
+    /// Decreases available funds by `amount`.
+    ///
+    /// Returns [`BalanceError::InsufficientFunds`] if `amount` exceeds
+    /// available funds, leaving the balance unchanged.
     pub(crate) fn withdraw(&mut self, amount: Amount) -> Result<(), BalanceError> {
         if self.available < amount {
             return Err(BalanceError::InsufficientFunds);
@@ -41,16 +64,22 @@ impl Balance {
         Ok(())
     }
 
+    /// Moves `amount` from available to held.
     pub(crate) fn hold(&mut self, amount: Amount) {
         self.available -= amount;
         self.held += amount;
     }
 
+    /// Moves `amount` from held back to available.
     pub(crate) fn release(&mut self, amount: Amount) {
         self.available += amount;
         self.held -= amount;
     }
 
+    /// Removes `amount` from held without returning it to available.
+    ///
+    /// This can leave `available` negative if funds were withdrawn before
+    /// the hold was placed.
     pub(crate) fn chargeback(&mut self, amount: Amount) {
         self.held -= amount;
     }
