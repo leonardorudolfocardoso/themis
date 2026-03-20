@@ -94,7 +94,10 @@ mod test {
         account.deposit(Amount::from(100)).unwrap();
         account.hold(Amount::from(100));
         account.chargeback(Amount::from(100));
-        assert!(matches!(account.deposit(Amount::from(50)), Err(AccountError::Locked)));
+        assert!(matches!(
+            account.deposit(Amount::from(50)),
+            Err(AccountError::Locked)
+        ));
         assert_eq!(account.available(), 0);
         assert_eq!(account.total(), 0);
     }
@@ -112,7 +115,10 @@ mod test {
     fn test_withdraw_insufficient_funds_returns_error() {
         let mut account = Account::new(1);
         account.deposit(Amount::from(100)).unwrap();
-        assert!(matches!(account.withdraw(Amount::from(200)), Err(AccountError::InsufficientFunds)));
+        assert!(matches!(
+            account.withdraw(Amount::from(200)),
+            Err(AccountError::InsufficientFunds)
+        ));
         assert_eq!(account.available(), 100);
         assert_eq!(account.total(), 100);
     }
@@ -123,7 +129,10 @@ mod test {
         account.deposit(Amount::from(100)).unwrap();
         account.hold(Amount::from(100));
         account.chargeback(Amount::from(100));
-        assert!(matches!(account.withdraw(Amount::from(50)), Err(AccountError::Locked)));
+        assert!(matches!(
+            account.withdraw(Amount::from(50)),
+            Err(AccountError::Locked)
+        ));
     }
 
     #[test]
