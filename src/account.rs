@@ -14,13 +14,13 @@ pub(crate) enum AccountError {
 
 /// Represents a client account with a balance and a locked state.
 ///
-/// An `Account` wraps a [`Balance`] and enforces one additional invariant:
+/// An `Account` wraps a `Balance` and enforces one additional invariant:
 /// a locked account rejects all deposits and withdrawals. Locking happens
 /// permanently after a chargeback and cannot be undone.
 ///
 /// Two distinct states govern fund availability:
-/// - **Frozen funds** — temporarily unavailable for withdrawal; reversible via [`Account::release`].
-/// - **Locked account** — permanently rejects all deposits and withdrawals; set by [`Account::chargeback`].
+/// - **Frozen funds** — temporarily unavailable for withdrawal; reversible via `release`.
+/// - **Locked account** — permanently rejects all deposits and withdrawals; set by `chargeback`.
 ///
 /// Freezing and releasing bypass the lock — they occur before a chargeback decision is made.
 pub struct Account {

@@ -5,7 +5,7 @@ use std::ops::{AddAssign, SubAssign};
 ///
 /// `Amount` is the type for all transaction values — deposits, withdrawals,
 /// and held funds. It is always non-negative; negative balances are
-/// represented by [`Funds`](crate::funds::Funds).
+/// represented by `Funds`.
 ///
 /// Internally, `1.2345` is stored as `12345`. This avoids floating-point
 /// arithmetic in all domain logic.

@@ -1,3 +1,4 @@
+//! A financial transaction processor that reads CSV event streams and outputs account balances.
 mod account;
 mod amount;
 mod balance;
