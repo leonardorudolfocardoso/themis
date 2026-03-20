@@ -3,19 +3,37 @@ use crate::balance::{Balance, BalanceError};
 use crate::funds::Funds;
 use crate::id::ClientId;
 
-pub struct Account {
-    client: ClientId,
-    balance: Balance,
-    locked: bool,
-}
-
+/// Error type for account operations.
 #[derive(Debug)]
 pub(crate) enum AccountError {
+    /// The account is locked and rejects all mutations.
     Locked,
+    /// The requested withdrawal exceeds the available funds.
     InsufficientFunds,
 }
 
+/// Represents a client account with a balance and a locked state.
+///
+/// An `Account` wraps a [`Balance`] and enforces one additional invariant:
+/// a locked account rejects all deposits and withdrawals. Locking happens
+/// permanently after a chargeback and cannot be undone.
+///
+/// Two distinct states govern fund availability:
+/// - **Frozen funds** — temporarily unavailable for withdrawal; reversible via [`Account::release`].
+/// - **Locked account** — permanently rejects all deposits and withdrawals; set by [`Account::chargeback`].
+///
+/// Freezing and releasing bypass the lock — they occur before a chargeback decision is made.
+pub struct Account {
+    /// The client this account belongs to.
+    client: ClientId,
+    /// The monetary state of the account.
+    balance: Balance,
+    /// Whether the account has been locked by a chargeback.
+    locked: bool,
+}
+
 impl Account {
+    /// Creates a new account for `client` with zero balance and unlocked state.
     pub(crate) fn new(client: u16) -> Self {
         Self {
             client,
@@ -24,26 +42,34 @@ impl Account {
         }
     }
 
+    /// Returns the client ID this account belongs to.
     pub fn client(&self) -> u16 {
         self.client
     }
 
+    /// Returns the funds available for withdrawal.
     pub fn available(&self) -> Funds {
         self.balance.available()
     }
 
+    /// Returns the funds currently held.
     pub fn held(&self) -> Amount {
         self.balance.held()
     }
 
+    /// Returns the total balance (`available + held`).
     pub fn total(&self) -> Funds {
         self.balance.total()
     }
 
+    /// Returns `true` if the account has been locked by a chargeback.
     pub fn locked(&self) -> bool {
         self.locked
     }
 
+    /// Increases available funds by `amount`.
+    ///
+    /// Returns [`AccountError::Locked`] if the account is locked.
     pub(crate) fn deposit(&mut self, amount: Amount) -> Result<(), AccountError> {
         if self.locked {
             return Err(AccountError::Locked);
@@ -52,6 +78,10 @@ impl Account {
         Ok(())
     }
 
+    /// Decreases available funds by `amount`.
+    ///
+    /// Returns [`AccountError::Locked`] if the account is locked, or
+    /// [`AccountError::InsufficientFunds`] if `amount` exceeds available funds.
     pub(crate) fn withdraw(&mut self, amount: Amount) -> Result<(), AccountError> {
         if self.locked {
             return Err(AccountError::Locked);
@@ -61,14 +91,22 @@ impl Account {
         })
     }
 
+    /// Moves `amount` from available to held.
+    /// Freezes `amount`, preventing it from being withdrawn.
     pub(crate) fn hold(&mut self, amount: Amount) {
         self.balance.hold(amount);
     }
 
+    /// Unfreezes `amount`, making it available for withdrawal again.
     pub(crate) fn release(&mut self, amount: Amount) {
         self.balance.release(amount);
     }
 
+    /// Permanently deducts the `amount` previously frozen by [`Account::hold`] and locks the
+    /// account, rejecting all future deposits and withdrawals.
+    ///
+    /// Can leave the available balance negative if funds were withdrawn before
+    /// the freeze.
     pub(crate) fn chargeback(&mut self, amount: Amount) {
         self.balance.chargeback(amount);
         self.locked = true;
