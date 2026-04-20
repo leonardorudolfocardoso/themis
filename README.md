@@ -23,7 +23,7 @@ A CSV file with the following columns:
 | `type`   | string  | `deposit`, `withdrawal`, `dispute`, `resolve`, `chargeback` |
 | `client` | u16     | Client ID                          |
 | `tx`     | u32     | Transaction ID (globally unique)   |
-| `amount` | f64     | Amount (up to 4 decimal places); omitted for dispute/resolve/chargeback |
+| `amount` | decimal string | Non-negative amount with up to 4 decimal places; omitted for dispute/resolve/chargeback |
 
 Example:
 
@@ -57,7 +57,7 @@ A CSV with one row per client:
 
 ## Implementation Notes
 
-- Monetary values are stored as scaled integers with 4 decimal places. Floating-point parsing is limited to the CSV boundary; account logic uses integer arithmetic only.
+- Monetary values are parsed directly from decimal strings and stored as scaled integers with 4 decimal places. Account logic uses integer arithmetic only.
 - `Amount` represents non-negative transaction values, while account balances use a signed `Funds` type so chargebacks can drive totals below zero.
 - Account locking is enforced separately from balance math. This keeps the balance model simple and makes the "locked accounts ignore future operations" rule easy to reason about.
 - Transaction records track both the original kind (`deposit` or `withdrawal`) and dispute lifecycle state, which makes invalid follow-up operations cheap to reject.
@@ -65,8 +65,9 @@ A CSV with one row per client:
 ## Assumptions
 
 - Invalid CSV rows are skipped rather than terminating the program.
+- Malformed, negative, over-precise, or overflowing amounts are treated as invalid rows.
 - Amounts are expected to fit within the numeric range supported by the implementation.
-- Inputs with more than 4 decimal places are rounded to the nearest 4-decimal representation at parse time.
+- Inputs with more than 4 decimal places are rejected rather than rounded.
 - The output is sorted by client ID to keep runs deterministic and reviewer-friendly.
 
 ## Architecture
