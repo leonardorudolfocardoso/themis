@@ -1,19 +1,19 @@
 use serde::Deserialize;
 
-use crate::amount::Amount;
 use crate::event::Event;
 
 /// Raw CSV row as deserialized by serde, before validation.
 ///
 /// The `type` column is renamed to `kind` to avoid shadowing Rust's keyword.
 /// `amount` is optional because dispute, resolve, and chargeback rows omit it.
+/// It stays as text until validation so decimal parsing is exact.
 #[derive(Deserialize)]
 struct RawEvent {
     #[serde(rename = "type")]
     kind: String,
     client: u16,
     tx: u32,
-    amount: Option<f64>,
+    amount: Option<String>,
 }
 
 impl TryFrom<RawEvent> for Event {
@@ -26,12 +26,12 @@ impl TryFrom<RawEvent> for Event {
             "deposit" => Ok(Event::Deposit {
                 client,
                 tx,
-                amount: Amount::try_from(row.amount.ok_or(())?)?,
+                amount: row.amount.ok_or(())?.parse()?,
             }),
             "withdrawal" => Ok(Event::Withdrawal {
                 client,
                 tx,
-                amount: Amount::try_from(row.amount.ok_or(())?)?,
+                amount: row.amount.ok_or(())?.parse()?,
             }),
             "dispute" => Ok(Event::Dispute { client, tx }),
             "resolve" => Ok(Event::Resolve { client, tx }),
@@ -127,6 +127,13 @@ mod test {
     #[test]
     fn test_invalid_rows_are_skipped() {
         let events = parse("type,client,tx,amount\nbadtype,1,1,1.0\ndeposit,1,2,1.0");
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], Event::Deposit { tx: 2, .. }));
+    }
+
+    #[test]
+    fn test_invalid_amount_rows_are_skipped() {
+        let events = parse("type,client,tx,amount\ndeposit,1,1,1.23456\ndeposit,1,2,1.2345");
         assert_eq!(events.len(), 1);
         assert!(matches!(events[0], Event::Deposit { tx: 2, .. }));
     }
