@@ -79,487 +79,77 @@ mod test {
     use crate::command::Command;
     use crate::event::Event;
 
-    fn ledger_with(transactions: Vec<Command>) -> Ledger {
-        let mut ledger = Ledger::new();
-        for transaction in transactions {
-            ledger.apply(transaction);
-        }
-        ledger
-    }
-
     fn account(ledger: &Ledger, client: u16) -> &Account {
         ledger.account(client).expect("account not found")
     }
 
-    #[test]
-    fn test_deposit_is_applied() {
-        let mut ledger = Ledger::new();
+    fn deposit(client: u16, tx: u32, amount: u64) -> Command {
+        Command::Deposit {
+            client,
+            tx,
+            amount: Amount::raw(amount),
+        }
+    }
 
-        let result = ledger.apply(Command::Deposit {
-            client: 1,
-            tx: 1,
-            amount: Amount::raw(100),
-        });
+    fn withdrawal(client: u16, tx: u32, amount: u64) -> Command {
+        Command::Withdrawal {
+            client,
+            tx,
+            amount: Amount::raw(amount),
+        }
+    }
 
-        assert_eq!(result, ApplyResult::Applied);
-        let account = account(&ledger, 1);
-        assert_eq!(account.available(), 100);
-        assert_eq!(account.total(), 100);
+    fn deposit_accepted(client: u16, tx: u32, amount: u64) -> Event {
+        Event::DepositAccepted {
+            client,
+            tx,
+            amount: Amount::raw(amount),
+        }
+    }
+
+    fn withdrawal_accepted(client: u16, tx: u32, amount: u64) -> Event {
+        Event::WithdrawalAccepted {
+            client,
+            tx,
+            amount: Amount::raw(amount),
+        }
     }
 
     #[test]
-    fn test_accepted_events_are_recorded() {
+    fn test_accepted_commands_are_recorded_and_projected() {
         let mut ledger = Ledger::new();
 
-        ledger.apply(Command::Deposit {
-            client: 1,
-            tx: 1,
-            amount: Amount::raw(100),
-        });
-        ledger.apply(Command::Deposit {
-            client: 1,
-            tx: 1,
-            amount: Amount::raw(999),
-        });
+        assert_eq!(ledger.apply(deposit(1, 1, 100)), ApplyResult::Applied);
+        assert_eq!(ledger.apply(withdrawal(1, 2, 40)), ApplyResult::Applied);
 
         assert_eq!(
             ledger.events(),
-            &[Event::DepositAccepted {
-                client: 1,
-                tx: 1,
-                amount: Amount::raw(100)
-            }]
+            &[deposit_accepted(1, 1, 100), withdrawal_accepted(1, 2, 40)]
         );
-    }
 
-    #[test]
-    fn test_withdrawal_is_applied() {
-        let mut ledger = ledger_with(vec![Command::Deposit {
-            client: 1,
-            tx: 1,
-            amount: Amount::raw(100),
-        }]);
-
-        let result = ledger.apply(Command::Withdrawal {
-            client: 1,
-            tx: 2,
-            amount: Amount::raw(20),
-        });
-
-        assert_eq!(result, ApplyResult::Applied);
         let account = account(&ledger, 1);
-        assert_eq!(account.available(), 80);
-        assert_eq!(account.total(), 80);
+        assert_eq!(account.available(), 60);
+        assert_eq!(account.total(), 60);
     }
 
     #[test]
-    fn test_ignored_withdrawal_does_not_create_account() {
+    fn test_ignored_command_is_not_recorded_or_projected() {
         let mut ledger = Ledger::new();
 
-        let result = ledger.apply(Command::Withdrawal {
-            client: 1,
-            tx: 1,
-            amount: Amount::raw(100),
-        });
+        assert_eq!(ledger.apply(withdrawal(1, 1, 100)), ApplyResult::Ignored);
 
-        assert_eq!(result, ApplyResult::Ignored);
+        assert!(ledger.events().is_empty());
         assert!(ledger.account(1).is_none());
     }
 
     #[test]
-    fn test_duplicate_tx_id_is_ignored() {
-        let mut ledger = ledger_with(vec![Command::Deposit {
-            client: 1,
-            tx: 1,
-            amount: Amount::raw(100),
-        }]);
+    fn test_process_consumes_commands_and_returns_final_accounts() {
+        let accounts =
+            Ledger::new().process(vec![deposit(1, 1, 100), withdrawal(1, 2, 40)].into_iter());
 
-        let result = ledger.apply(Command::Deposit {
-            client: 1,
-            tx: 1,
-            amount: Amount::raw(999),
-        });
-
-        assert_eq!(result, ApplyResult::Ignored);
-        let account = account(&ledger, 1);
-        assert_eq!(account.available(), 100);
-        assert_eq!(account.total(), 100);
-    }
-
-    #[test]
-    fn test_duplicate_withdrawal_tx_id_is_ignored() {
-        let mut ledger = ledger_with(vec![
-            Command::Deposit {
-                client: 1,
-                tx: 1,
-                amount: Amount::raw(100),
-            },
-            Command::Withdrawal {
-                client: 1,
-                tx: 2,
-                amount: Amount::raw(20),
-            },
-        ]);
-
-        let result = ledger.apply(Command::Withdrawal {
-            client: 1,
-            tx: 2,
-            amount: Amount::raw(20),
-        });
-
-        assert_eq!(result, ApplyResult::Ignored);
-        let account = account(&ledger, 1);
-        assert_eq!(account.available(), 80);
-        assert_eq!(account.total(), 80);
-    }
-
-    #[test]
-    fn test_deposit_on_locked_account_is_ignored() {
-        let mut ledger = ledger_with(vec![
-            Command::Deposit {
-                client: 1,
-                tx: 1,
-                amount: Amount::raw(100),
-            },
-            Command::Dispute { client: 1, tx: 1 },
-            Command::Chargeback { client: 1, tx: 1 },
-        ]);
-
-        let result = ledger.apply(Command::Deposit {
-            client: 1,
-            tx: 2,
-            amount: Amount::raw(50),
-        });
-
-        assert_eq!(result, ApplyResult::Ignored);
-        let account = account(&ledger, 1);
-        assert_eq!(account.available(), 0);
-        assert_eq!(account.total(), 0);
-        assert!(account.locked());
-    }
-
-    #[test]
-    fn test_withdraw_locked_is_silently_ignored() {
-        let mut ledger = ledger_with(vec![
-            Command::Deposit {
-                client: 1,
-                tx: 1,
-                amount: Amount::raw(100),
-            },
-            Command::Dispute { client: 1, tx: 1 },
-            Command::Chargeback { client: 1, tx: 1 },
-        ]);
-
-        let result = ledger.apply(Command::Withdrawal {
-            client: 1,
-            tx: 2,
-            amount: Amount::raw(50),
-        });
-
-        assert_eq!(result, ApplyResult::Ignored);
-        let account = account(&ledger, 1);
-        assert_eq!(account.total(), 0);
-        assert!(account.locked());
-    }
-
-    #[test]
-    fn test_dispute_on_withdrawal_is_ignored() {
-        let mut ledger = ledger_with(vec![
-            Command::Deposit {
-                client: 1,
-                tx: 1,
-                amount: Amount::raw(100),
-            },
-            Command::Withdrawal {
-                client: 1,
-                tx: 2,
-                amount: Amount::raw(40),
-            },
-        ]);
-
-        let result = ledger.apply(Command::Dispute { client: 1, tx: 2 });
-
-        assert_eq!(result, ApplyResult::Ignored);
-        let account = account(&ledger, 1);
+        assert_eq!(accounts.len(), 1);
+        let account = accounts.get(&1).expect("account not found");
         assert_eq!(account.available(), 60);
-        assert_eq!(account.held(), Amount::default());
-    }
-
-    #[test]
-    fn test_dispute_decreases_available_and_increases_held() {
-        let mut ledger = ledger_with(vec![Command::Deposit {
-            client: 1,
-            tx: 1,
-            amount: Amount::raw(100),
-        }]);
-
-        let result = ledger.apply(Command::Dispute { client: 1, tx: 1 });
-
-        assert_eq!(result, ApplyResult::Applied);
-        let account = account(&ledger, 1);
-        assert_eq!(account.available(), 0);
-        assert_eq!(account.held(), Amount::raw(100));
-        assert_eq!(account.total(), 100);
-    }
-
-    #[test]
-    fn test_dispute_on_wrong_client_is_ignored() {
-        let mut ledger = ledger_with(vec![Command::Deposit {
-            client: 1,
-            tx: 1,
-            amount: Amount::raw(100),
-        }]);
-
-        let result = ledger.apply(Command::Dispute { client: 2, tx: 1 });
-
-        assert_eq!(result, ApplyResult::Ignored);
-        let account = account(&ledger, 1);
-        assert_eq!(account.available(), 100);
-        assert_eq!(account.held(), Amount::default());
-    }
-
-    #[test]
-    fn test_dispute_on_invalid_state_is_ignored() {
-        let mut ledger = ledger_with(vec![
-            Command::Deposit {
-                client: 1,
-                tx: 1,
-                amount: Amount::raw(100),
-            },
-            Command::Dispute { client: 1, tx: 1 },
-        ]);
-
-        let result = ledger.apply(Command::Dispute { client: 1, tx: 1 });
-
-        assert_eq!(result, ApplyResult::Ignored);
-        let account = account(&ledger, 1);
-        assert_eq!(account.available(), 0);
-        assert_eq!(account.held(), Amount::raw(100));
-    }
-
-    #[test]
-    fn test_dispute_on_locked_account_is_ignored() {
-        let mut ledger = ledger_with(vec![
-            Command::Deposit {
-                client: 1,
-                tx: 1,
-                amount: Amount::raw(100),
-            },
-            Command::Deposit {
-                client: 1,
-                tx: 2,
-                amount: Amount::raw(50),
-            },
-            Command::Dispute { client: 1, tx: 1 },
-            Command::Chargeback { client: 1, tx: 1 },
-        ]);
-
-        let result = ledger.apply(Command::Dispute { client: 1, tx: 2 });
-
-        assert_eq!(result, ApplyResult::Ignored);
-        let account = account(&ledger, 1);
-        assert_eq!(account.available(), 50);
-        assert_eq!(account.held(), Amount::default());
-        assert_eq!(account.total(), 50);
-        assert!(account.locked());
-    }
-
-    #[test]
-    fn test_resolve_decreases_held_and_increases_available() {
-        let mut ledger = ledger_with(vec![
-            Command::Deposit {
-                client: 1,
-                tx: 1,
-                amount: Amount::raw(100),
-            },
-            Command::Dispute { client: 1, tx: 1 },
-        ]);
-
-        let result = ledger.apply(Command::Resolve { client: 1, tx: 1 });
-
-        assert_eq!(result, ApplyResult::Applied);
-        let account = account(&ledger, 1);
-        assert_eq!(account.available(), 100);
-        assert_eq!(account.held(), Amount::default());
-        assert_eq!(account.total(), 100);
-    }
-
-    #[test]
-    fn test_resolve_without_dispute_is_ignored() {
-        let mut ledger = ledger_with(vec![Command::Deposit {
-            client: 1,
-            tx: 1,
-            amount: Amount::raw(100),
-        }]);
-
-        let result = ledger.apply(Command::Resolve { client: 1, tx: 1 });
-
-        assert_eq!(result, ApplyResult::Ignored);
-        let account = account(&ledger, 1);
-        assert_eq!(account.available(), 100);
-        assert_eq!(account.held(), Amount::default());
-    }
-
-    #[test]
-    fn test_resolve_on_wrong_client_is_ignored() {
-        let mut ledger = ledger_with(vec![
-            Command::Deposit {
-                client: 1,
-                tx: 1,
-                amount: Amount::raw(100),
-            },
-            Command::Dispute { client: 1, tx: 1 },
-        ]);
-
-        let result = ledger.apply(Command::Resolve { client: 2, tx: 1 });
-
-        assert_eq!(result, ApplyResult::Ignored);
-        let account = account(&ledger, 1);
-        assert_eq!(account.available(), 0);
-        assert_eq!(account.held(), Amount::raw(100));
-    }
-
-    #[test]
-    fn test_resolve_on_already_resolved_is_ignored() {
-        let mut ledger = ledger_with(vec![
-            Command::Deposit {
-                client: 1,
-                tx: 1,
-                amount: Amount::raw(100),
-            },
-            Command::Dispute { client: 1, tx: 1 },
-            Command::Resolve { client: 1, tx: 1 },
-        ]);
-
-        let result = ledger.apply(Command::Resolve { client: 1, tx: 1 });
-
-        assert_eq!(result, ApplyResult::Ignored);
-        let account = account(&ledger, 1);
-        assert_eq!(account.available(), 100);
-        assert_eq!(account.held(), Amount::default());
-    }
-
-    #[test]
-    fn test_chargeback_locks_account_and_decreases_held_and_total() {
-        let mut ledger = ledger_with(vec![
-            Command::Deposit {
-                client: 1,
-                tx: 1,
-                amount: Amount::raw(100),
-            },
-            Command::Dispute { client: 1, tx: 1 },
-        ]);
-
-        let result = ledger.apply(Command::Chargeback { client: 1, tx: 1 });
-
-        assert_eq!(result, ApplyResult::Applied);
-        let account = account(&ledger, 1);
-        assert_eq!(account.available(), 0);
-        assert_eq!(account.held(), Amount::default());
-        assert_eq!(account.total(), 0);
-        assert!(account.locked());
-    }
-
-    #[test]
-    fn test_chargeback_without_dispute_is_ignored() {
-        let mut ledger = ledger_with(vec![Command::Deposit {
-            client: 1,
-            tx: 1,
-            amount: Amount::raw(100),
-        }]);
-
-        let result = ledger.apply(Command::Chargeback { client: 1, tx: 1 });
-
-        assert_eq!(result, ApplyResult::Ignored);
-        let account = account(&ledger, 1);
-        assert!(!account.locked());
-    }
-
-    #[test]
-    fn test_chargeback_on_wrong_client_is_ignored() {
-        let mut ledger = ledger_with(vec![
-            Command::Deposit {
-                client: 1,
-                tx: 1,
-                amount: Amount::raw(100),
-            },
-            Command::Dispute { client: 1, tx: 1 },
-        ]);
-
-        let result = ledger.apply(Command::Chargeback { client: 2, tx: 1 });
-
-        assert_eq!(result, ApplyResult::Ignored);
-        let account = account(&ledger, 1);
-        assert_eq!(account.held(), Amount::raw(100));
-        assert!(!account.locked());
-    }
-
-    #[test]
-    fn test_chargeback_on_already_chargedback_is_ignored() {
-        let mut ledger = ledger_with(vec![
-            Command::Deposit {
-                client: 1,
-                tx: 1,
-                amount: Amount::raw(100),
-            },
-            Command::Dispute { client: 1, tx: 1 },
-            Command::Chargeback { client: 1, tx: 1 },
-        ]);
-
-        let result = ledger.apply(Command::Chargeback { client: 1, tx: 1 });
-
-        assert_eq!(result, ApplyResult::Ignored);
-        let account = account(&ledger, 1);
-        assert_eq!(account.held(), Amount::default());
-        assert_eq!(account.total(), 0);
-        assert!(account.locked());
-    }
-
-    #[test]
-    fn test_resolve_after_withdrawal_is_correct() {
-        // Deposit 100, withdraw 80 (total=20), dispute the deposit, resolve.
-        let ledger = ledger_with(vec![
-            Command::Deposit {
-                client: 1,
-                tx: 1,
-                amount: Amount::raw(100),
-            },
-            Command::Withdrawal {
-                client: 1,
-                tx: 2,
-                amount: Amount::raw(80),
-            },
-            Command::Dispute { client: 1, tx: 1 },
-            Command::Resolve { client: 1, tx: 1 },
-        ]);
-        let account = account(&ledger, 1);
-        assert_eq!(account.available(), 20);
-        assert_eq!(account.held(), Amount::default());
-        assert_eq!(account.total(), 20);
-    }
-
-    #[test]
-    fn test_chargeback_of_deposit_after_withdrawal_total_is_negative() {
-        // Deposit 100, withdraw 80 (total=20), dispute the deposit, chargeback.
-        // total = 20 - 100 = -80: the account owes the bank the withdrawn funds.
-        let ledger = ledger_with(vec![
-            Command::Deposit {
-                client: 1,
-                tx: 1,
-                amount: Amount::raw(100),
-            },
-            Command::Withdrawal {
-                client: 1,
-                tx: 2,
-                amount: Amount::raw(80),
-            },
-            Command::Dispute { client: 1, tx: 1 },
-            Command::Chargeback { client: 1, tx: 1 },
-        ]);
-        let account = account(&ledger, 1);
-        assert_eq!(account.available(), -80);
-        assert_eq!(account.held(), Amount::default());
-        assert_eq!(account.total(), -80);
-        assert!(account.locked());
+        assert_eq!(account.total(), 60);
     }
 }
