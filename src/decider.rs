@@ -3,6 +3,7 @@ use crate::command::Command;
 use crate::event::Event;
 use crate::projection::LedgerProjection;
 
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Decision {
     Apply(Event),
     Ignore,
@@ -116,5 +117,211 @@ impl Decider {
         }
 
         Decision::Apply(Event::DepositChargedBack { client, tx, amount })
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::{Decider, Decision};
+    use crate::amount::Amount;
+    use crate::command::Command;
+    use crate::event::Event;
+    use crate::projection::LedgerProjection;
+
+    fn projection_with(events: &[Event]) -> LedgerProjection {
+        let mut projection = LedgerProjection::default();
+        for event in events {
+            projection.apply(*event);
+        }
+        projection
+    }
+
+    fn decide_with_previous_events(events: &[Event], command: Command) -> Decision {
+        Decider::decide(&projection_with(events), command)
+    }
+
+    fn deposit(client: u16, tx: u32, amount: u64) -> Command {
+        Command::Deposit {
+            client,
+            tx,
+            amount: Amount::raw(amount),
+        }
+    }
+
+    fn withdrawal(client: u16, tx: u32, amount: u64) -> Command {
+        Command::Withdrawal {
+            client,
+            tx,
+            amount: Amount::raw(amount),
+        }
+    }
+
+    fn deposit_accepted(client: u16, tx: u32, amount: u64) -> Event {
+        Event::DepositAccepted {
+            client,
+            tx,
+            amount: Amount::raw(amount),
+        }
+    }
+
+    fn withdrawal_accepted(client: u16, tx: u32, amount: u64) -> Event {
+        Event::WithdrawalAccepted {
+            client,
+            tx,
+            amount: Amount::raw(amount),
+        }
+    }
+
+    fn deposit_disputed(client: u16, tx: u32, amount: u64) -> Event {
+        Event::DepositDisputed {
+            client,
+            tx,
+            amount: Amount::raw(amount),
+        }
+    }
+
+    fn dispute_resolved(client: u16, tx: u32, amount: u64) -> Event {
+        Event::DisputeResolved {
+            client,
+            tx,
+            amount: Amount::raw(amount),
+        }
+    }
+
+    fn deposit_charged_back(client: u16, tx: u32, amount: u64) -> Event {
+        Event::DepositChargedBack {
+            client,
+            tx,
+            amount: Amount::raw(amount),
+        }
+    }
+
+    #[test]
+    fn test_deposit_is_accepted_for_new_transaction() {
+        assert_eq!(
+            decide_with_previous_events(&[], deposit(1, 1, 100)),
+            Decision::Apply(deposit_accepted(1, 1, 100))
+        );
+    }
+
+    #[test]
+    fn test_duplicate_deposit_is_ignored() {
+        assert_eq!(
+            decide_with_previous_events(&[deposit_accepted(1, 1, 100)], deposit(1, 1, 999),),
+            Decision::Ignore
+        );
+    }
+
+    #[test]
+    fn test_withdrawal_is_accepted_when_account_has_enough_available_funds() {
+        assert_eq!(
+            decide_with_previous_events(&[deposit_accepted(1, 1, 100)], withdrawal(1, 2, 60),),
+            Decision::Apply(withdrawal_accepted(1, 2, 60))
+        );
+    }
+
+    #[test]
+    fn test_withdrawal_is_ignored_without_existing_account() {
+        assert_eq!(
+            decide_with_previous_events(&[], withdrawal(1, 1, 60)),
+            Decision::Ignore
+        );
+    }
+
+    #[test]
+    fn test_withdrawal_is_ignored_without_enough_available_funds() {
+        assert_eq!(
+            decide_with_previous_events(&[deposit_accepted(1, 1, 50)], withdrawal(1, 2, 60),),
+            Decision::Ignore
+        );
+    }
+
+    #[test]
+    fn test_dispute_is_accepted_for_valid_deposit_owned_by_client() {
+        assert_eq!(
+            decide_with_previous_events(
+                &[deposit_accepted(1, 1, 100)],
+                Command::Dispute { client: 1, tx: 1 },
+            ),
+            Decision::Apply(deposit_disputed(1, 1, 100))
+        );
+    }
+
+    #[test]
+    fn test_dispute_is_ignored_for_withdrawal() {
+        assert_eq!(
+            decide_with_previous_events(
+                &[deposit_accepted(1, 1, 100), withdrawal_accepted(1, 2, 40)],
+                Command::Dispute { client: 1, tx: 2 },
+            ),
+            Decision::Ignore
+        );
+    }
+
+    #[test]
+    fn test_dispute_is_ignored_for_transaction_owned_by_another_client() {
+        assert_eq!(
+            decide_with_previous_events(
+                &[deposit_accepted(1, 1, 100)],
+                Command::Dispute { client: 2, tx: 1 },
+            ),
+            Decision::Ignore
+        );
+    }
+
+    #[test]
+    fn test_resolve_is_accepted_for_disputed_deposit() {
+        assert_eq!(
+            decide_with_previous_events(
+                &[deposit_accepted(1, 1, 100), deposit_disputed(1, 1, 100)],
+                Command::Resolve { client: 1, tx: 1 },
+            ),
+            Decision::Apply(dispute_resolved(1, 1, 100))
+        );
+    }
+
+    #[test]
+    fn test_resolve_is_ignored_for_valid_deposit() {
+        assert_eq!(
+            decide_with_previous_events(
+                &[deposit_accepted(1, 1, 100)],
+                Command::Resolve { client: 1, tx: 1 },
+            ),
+            Decision::Ignore
+        );
+    }
+
+    #[test]
+    fn test_chargeback_is_accepted_for_disputed_deposit() {
+        assert_eq!(
+            decide_with_previous_events(
+                &[deposit_accepted(1, 1, 100), deposit_disputed(1, 1, 100)],
+                Command::Chargeback { client: 1, tx: 1 },
+            ),
+            Decision::Apply(deposit_charged_back(1, 1, 100))
+        );
+    }
+
+    #[test]
+    fn test_commands_for_locked_account_are_ignored() {
+        let events = [
+            deposit_accepted(1, 1, 100),
+            deposit_accepted(1, 2, 50),
+            deposit_disputed(1, 1, 100),
+            deposit_charged_back(1, 1, 100),
+        ];
+
+        assert_eq!(
+            decide_with_previous_events(&events, deposit(1, 3, 50)),
+            Decision::Ignore
+        );
+        assert_eq!(
+            decide_with_previous_events(&events, withdrawal(1, 3, 10)),
+            Decision::Ignore
+        );
+        assert_eq!(
+            decide_with_previous_events(&events, Command::Dispute { client: 1, tx: 2 }),
+            Decision::Ignore
+        );
     }
 }
