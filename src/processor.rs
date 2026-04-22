@@ -1,7 +1,6 @@
 use crate::account::Account;
-use crate::amount::Amount;
 use crate::command::Command;
-use crate::event::Event;
+use crate::decider::{Decider, Decision};
 use crate::id::ClientId;
 use crate::projection::LedgerProjection;
 
@@ -24,11 +23,6 @@ pub struct Processor {
 pub enum ApplyResult {
     Applied,
     Ignored,
-}
-
-enum Decision {
-    Apply(Event),
-    Ignore,
 }
 
 impl Processor {
@@ -56,114 +50,13 @@ impl Processor {
     }
 
     pub fn apply(&mut self, transaction: Command) -> ApplyResult {
-        match self.decide(transaction) {
+        match Decider::decide(&self.projection, transaction) {
             Decision::Apply(event) => {
                 self.projection.apply(event);
                 ApplyResult::Applied
             }
             Decision::Ignore => ApplyResult::Ignored,
         }
-    }
-
-    fn decide(&mut self, transaction: Command) -> Decision {
-        match transaction {
-            Command::Deposit { client, tx, amount } => {
-                if self.projection.has_record(tx) {
-                    Decision::Ignore
-                } else {
-                    self.decide_deposit(client, tx, amount)
-                }
-            }
-            Command::Withdrawal { client, tx, amount } => {
-                if self.projection.has_record(tx) {
-                    Decision::Ignore
-                } else {
-                    self.decide_withdrawal(client, tx, amount)
-                }
-            }
-            Command::Dispute { client, tx } => self.decide_dispute(client, tx),
-            Command::Resolve { client, tx } => self.decide_resolve(client, tx),
-            Command::Chargeback { client, tx } => self.decide_chargeback(client, tx),
-        }
-    }
-
-    fn decide_deposit(&mut self, client: u16, tx: u32, amount: Amount) -> Decision {
-        if self
-            .projection
-            .account(client)
-            .is_some_and(|account| account.locked())
-        {
-            return Decision::Ignore;
-        }
-
-        Decision::Apply(Event::DepositAccepted { client, tx, amount })
-    }
-
-    fn decide_withdrawal(&mut self, client: u16, tx: u32, amount: Amount) -> Decision {
-        let Some(account) = self.projection.account(client) else {
-            return Decision::Ignore;
-        };
-
-        if account.locked() || account.available() < amount {
-            return Decision::Ignore;
-        }
-
-        Decision::Apply(Event::WithdrawalAccepted { client, tx, amount })
-    }
-
-    fn decide_dispute(&mut self, client: u16, tx: u32) -> Decision {
-        let amount = match self.projection.record(tx) {
-            Some(record) if record.client == client && record.is_disputable() => record.amount,
-            _ => return Decision::Ignore,
-        };
-
-        if self
-            .projection
-            .account(client)
-            .is_some_and(|account| account.locked())
-        {
-            return Decision::Ignore;
-        }
-
-        Decision::Apply(Event::DepositDisputed { client, tx, amount })
-    }
-
-    fn decide_resolve(&mut self, client: u16, tx: u32) -> Decision {
-        let amount = match self.projection.record(tx) {
-            Some(record) if record.client == client && record.state.is_resolvable() => {
-                record.amount
-            }
-            _ => return Decision::Ignore,
-        };
-
-        if self
-            .projection
-            .account(client)
-            .is_some_and(|account| account.locked())
-        {
-            return Decision::Ignore;
-        }
-
-        Decision::Apply(Event::DisputeResolved { client, tx, amount })
-    }
-
-    fn decide_chargeback(&mut self, client: u16, tx: u32) -> Decision {
-        let amount = match self.projection.record(tx) {
-            Some(record) if record.client == client && record.state.is_chargebackable() => {
-                record.amount
-            }
-            _ => return Decision::Ignore,
-        };
-
-        if self
-            .projection
-            .account(client)
-            .is_some_and(|account| account.locked())
-        {
-            return Decision::Ignore;
-        }
-
-        Decision::Apply(Event::DepositChargedBack { client, tx, amount })
     }
 }
 
