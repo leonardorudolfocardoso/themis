@@ -100,7 +100,10 @@ impl Processor {
     }
 
     fn decide_withdrawal(&mut self, client: u16, tx: u32, amount: Amount) -> Decision {
-        let account = self.projection.account_mut_or_create(client);
+        let Some(account) = self.projection.account(client) else {
+            return Decision::Ignore;
+        };
+
         if account.locked() || account.available() < amount {
             return Decision::Ignore;
         }
@@ -218,6 +221,20 @@ mod test {
         let account = account(&processor, 1);
         assert_eq!(account.available(), 80);
         assert_eq!(account.total(), 80);
+    }
+
+    #[test]
+    fn test_ignored_withdrawal_does_not_create_account() {
+        let mut processor = Processor::new();
+
+        let result = processor.apply(Command::Withdrawal {
+            client: 1,
+            tx: 1,
+            amount: Amount::raw(100),
+        });
+
+        assert_eq!(result, ApplyResult::Ignored);
+        assert!(processor.account(1).is_none());
     }
 
     #[test]
