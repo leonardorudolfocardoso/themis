@@ -64,10 +64,23 @@ impl LedgerProjection {
 
                 record.state = State::Disputed;
             }
-            Event::DisputeResolved { .. } | Event::DepositChargedBack { .. } => {
-                unreachable!(
-                    "only deposits, withdrawals, and disputes are projected through events yet"
-                )
+            Event::DisputeResolved { client, tx, amount } => {
+                let account = self
+                    .account_mut(client)
+                    .expect("DisputeResolved must target an existing account");
+
+                account
+                    .release(amount)
+                    .expect("DisputeResolved must target an unlocked account");
+
+                let record = self
+                    .record_mut(tx)
+                    .expect("DisputeResolved must target an existing transaction");
+
+                record.state = State::Resolved;
+            }
+            Event::DepositChargedBack { .. } => {
+                unreachable!("only chargebacks are not projected through events yet")
             }
         }
     }
