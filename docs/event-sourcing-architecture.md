@@ -16,11 +16,11 @@ external databases can come later.
 ```mermaid
 flowchart LR
     CSV[CSV / API / Broker] --> Command[Command]
-    Command --> Processor[Processor / Decider]
-    Projection[(Ledger Projection)] --> Processor
+    Command --> Ledger[Ledger / Decider]
+    Projection[(Ledger Projection)] --> Ledger
 
-    Processor -->|accepted| EventLog[(Event Log)]
-    Processor -->|ignored| Ignored[Ignored Result]
+    Ledger -->|accepted| EventLog[(Event Log)]
+    Ledger -->|ignored| Ignored[Ignored Result]
 
     EventLog --> Projection
     Projection --> Output[CSV Output / Query API]
@@ -38,7 +38,7 @@ Command -> decide -> Event -> project -> Account state
 flowchart TD
     Command[Command<br/>Deposit, Withdrawal, Dispute, Resolve, Chargeback]
 
-    Decider[Processor / Decider<br/>checks rules against current projection]
+    Decider[Ledger / Decider<br/>checks rules against current projection]
 
     Event[Event<br/>DepositAccepted, WithdrawalAccepted,<br/>DepositDisputed, DisputeResolved,<br/>DepositChargedBack]
 
@@ -51,7 +51,7 @@ flowchart TD
     Event --> Projection
 ```
 
-The `Processor` should answer one question:
+The `Ledger` should answer one question:
 
 ```text
 Given this command and the current ledger projection,
@@ -70,23 +70,21 @@ how does account and transaction state change?
 ```mermaid
 sequenceDiagram
     participant Input as Input
-    participant Processor as Processor / Decider
+    participant Ledger as Ledger / Decider
     participant Projection as Ledger Projection
     participant Log as Event Log
 
-    Input->>Processor: Command::Deposit(client=1, tx=10, amount=100)
-    Processor->>Projection: has tx=10? is account locked?
-    Projection-->>Processor: no duplicate, account open
-    Processor->>Log: append Event::DepositAccepted
+    Input->>Ledger: Command::Deposit(client=1, tx=10, amount=100)
+    Ledger->>Projection: has tx=10? is account locked?
+    Projection-->>Ledger: no duplicate, account open
+    Ledger->>Log: append Event::DepositAccepted
     Log->>Projection: apply Event::DepositAccepted
     Projection-->>Projection: available += 100, record tx=10
 ```
 
-## Current Code Direction
+## Current Implementation
 
-The current code already moved the external input type to `Command`.
-
-The next useful code step is to introduce accepted domain events:
+The external input type is `Command`, and accepted ledger facts are `Event`s:
 
 ```rust
 pub enum Event {
@@ -98,7 +96,7 @@ pub enum Event {
 }
 ```
 
-After that, `Processor::apply(command)` can become:
+`Ledger::apply(command)` now follows this shape:
 
 ```text
 decide command

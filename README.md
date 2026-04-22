@@ -2,7 +2,7 @@
 
 > In Greek mythology, Themis is the goddess of justice, law, and divine order — the keeper of rules that cannot be broken.
 
-Themis is a financial transaction processor. It reads a stream of transaction events from a CSV file, applies them to client accounts, and outputs the resulting account state. Like its namesake, it enforces rules that cannot be bent: a locked account stays locked, a withdrawal dispute is ignored, a chargeback that leaves a balance negative is still recorded faithfully.
+Themis is a financial transaction ledger. It reads a stream of transaction commands from a CSV file, applies accepted events to client accounts, and outputs the resulting account state. Like its namesake, it enforces rules that cannot be bent: a locked account stays locked, a withdrawal dispute is ignored, a chargeback that leaves a balance negative is still recorded faithfully.
 
 ## Usage
 
@@ -76,37 +76,27 @@ A CSV with one row per client:
 sequenceDiagram
     participant CSV as CSV Input
     participant Reader as csv::Reader
-    participant Processor
-    participant Records as Transaction Records
-    participant Account
+    participant Ledger
+    participant Decider
+    participant Log as Event Log
+    participant Projection as Ledger Projection
     participant Writer as csv::Writer
     participant Out as CSV Output
 
-    CSV->>Reader: raw row
-    Reader->>Processor: Event (Deposit / Withdrawal) or skip invalid row
-    Processor->>Records: check duplicate tx
-    Processor->>Account: deposit() / withdraw()
-    Processor->>Records: store record on success
+    loop for each CSV row
+        CSV->>Reader: raw row
+        Reader->>Ledger: Command or skip invalid row
+        Ledger->>Decider: decide command against projection
+        Decider-->>Ledger: accepted Event or Ignored
+        alt accepted
+            Ledger->>Log: append Event
+            Ledger->>Projection: apply Event
+        else ignored
+            Ledger-->>Ledger: leave state unchanged
+        end
+    end
 
-    CSV->>Reader: raw row
-    Reader->>Processor: Event (Dispute)
-    Processor->>Records: lookup valid deposit for same client
-    Processor->>Account: hold()
-    Processor->>Records: mark Disputed on success
-
-    CSV->>Reader: raw row
-    Reader->>Processor: Event (Resolve)
-    Processor->>Records: lookup disputed record for same client
-    Processor->>Account: release()
-    Processor->>Records: mark Resolved on success
-
-    CSV->>Reader: raw row
-    Reader->>Processor: Event (Chargeback)
-    Processor->>Records: lookup disputed record for same client
-    Processor->>Account: chargeback() and lock account
-    Processor->>Records: mark Chargedback on success
-
-    Processor->>Writer: accounts
+    Projection->>Writer: accounts
     Writer->>Writer: sort by client ID
     Writer->>Out: client, available, held, total, locked
 ```
