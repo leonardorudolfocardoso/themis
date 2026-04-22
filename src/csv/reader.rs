@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::event::Event;
+use crate::command::Command;
 
 /// Raw CSV row as deserialized by serde, before validation.
 ///
@@ -16,36 +16,36 @@ struct RawEvent {
     amount: Option<String>,
 }
 
-impl TryFrom<RawEvent> for Event {
+impl TryFrom<RawEvent> for Command {
     type Error = ();
 
     fn try_from(row: RawEvent) -> Result<Self, Self::Error> {
         let client = row.client;
         let tx = row.tx;
         match row.kind.as_str() {
-            "deposit" => Ok(Event::Deposit {
+            "deposit" => Ok(Command::Deposit {
                 client,
                 tx,
                 amount: row.amount.ok_or(())?.parse()?,
             }),
-            "withdrawal" => Ok(Event::Withdrawal {
+            "withdrawal" => Ok(Command::Withdrawal {
                 client,
                 tx,
                 amount: row.amount.ok_or(())?.parse()?,
             }),
-            "dispute" => Ok(Event::Dispute { client, tx }),
-            "resolve" => Ok(Event::Resolve { client, tx }),
-            "chargeback" => Ok(Event::Chargeback { client, tx }),
+            "dispute" => Ok(Command::Dispute { client, tx }),
+            "resolve" => Ok(Command::Resolve { client, tx }),
+            "chargeback" => Ok(Command::Chargeback { client, tx }),
             _ => Err(()),
         }
     }
 }
 
-/// Parses a CSV stream into an iterator of [`Event`]s.
+/// Parses a CSV stream into an iterator of `Command`s.
 ///
 /// Rows that cannot be deserialized or converted to a known event type are
 /// silently skipped. Leading and trailing whitespace is trimmed from all fields.
-pub fn from_reader(reader: impl std::io::Read) -> impl Iterator<Item = Event> {
+pub fn from_reader(reader: impl std::io::Read) -> impl Iterator<Item = Command> {
     csv::ReaderBuilder::new()
         .trim(csv::Trim::All)
         .from_reader(reader)
@@ -58,9 +58,9 @@ pub fn from_reader(reader: impl std::io::Read) -> impl Iterator<Item = Event> {
 mod test {
     use super::*;
     use crate::amount::Amount;
-    use crate::event::Event;
+    use crate::command::Command;
 
-    fn parse(input: &str) -> Vec<Event> {
+    fn parse(input: &str) -> Vec<Command> {
         from_reader(input.as_bytes()).collect()
     }
 
@@ -69,14 +69,14 @@ mod test {
         let events = parse("type,client,tx,amount\ndeposit,1,1,1.5");
         assert!(matches!(
             events[0],
-            Event::Deposit {
+            Command::Deposit {
                 client: 1,
                 tx: 1,
                 ..
             }
         ));
         assert_eq!(
-            if let Event::Deposit { amount, .. } = events[0] {
+            if let Command::Deposit { amount, .. } = events[0] {
                 amount
             } else {
                 unreachable!()
@@ -90,14 +90,14 @@ mod test {
         let events = parse("type,client,tx,amount\nwithdrawal,2,3,0.0001");
         assert!(matches!(
             events[0],
-            Event::Withdrawal {
+            Command::Withdrawal {
                 client: 2,
                 tx: 3,
                 ..
             }
         ));
         assert_eq!(
-            if let Event::Withdrawal { amount, .. } = events[0] {
+            if let Command::Withdrawal { amount, .. } = events[0] {
                 amount
             } else {
                 unreachable!()
@@ -109,33 +109,33 @@ mod test {
     #[test]
     fn test_parse_dispute() {
         let events = parse("type,client,tx,amount\ndispute,1,1,");
-        assert!(matches!(events[0], Event::Dispute { client: 1, tx: 1 }));
+        assert!(matches!(events[0], Command::Dispute { client: 1, tx: 1 }));
     }
 
     #[test]
     fn test_parse_resolve() {
         let events = parse("type,client,tx,amount\nresolve,1,1,");
-        assert!(matches!(events[0], Event::Resolve { client: 1, tx: 1 }));
+        assert!(matches!(events[0], Command::Resolve { client: 1, tx: 1 }));
     }
 
     #[test]
     fn test_parse_chargeback() {
         let events = parse("type,client,tx,amount\nchargeback,1,1,");
-        assert!(matches!(events[0], Event::Chargeback { client: 1, tx: 1 }));
+        assert!(matches!(events[0], Command::Chargeback { client: 1, tx: 1 }));
     }
 
     #[test]
     fn test_invalid_rows_are_skipped() {
         let events = parse("type,client,tx,amount\nbadtype,1,1,1.0\ndeposit,1,2,1.0");
         assert_eq!(events.len(), 1);
-        assert!(matches!(events[0], Event::Deposit { tx: 2, .. }));
+        assert!(matches!(events[0], Command::Deposit { tx: 2, .. }));
     }
 
     #[test]
     fn test_invalid_amount_rows_are_skipped() {
         let events = parse("type,client,tx,amount\ndeposit,1,1,1.23456\ndeposit,1,2,1.2345");
         assert_eq!(events.len(), 1);
-        assert!(matches!(events[0], Event::Deposit { tx: 2, .. }));
+        assert!(matches!(events[0], Command::Deposit { tx: 2, .. }));
     }
 
     #[test]
@@ -143,14 +143,14 @@ mod test {
         let events = parse("type, client, tx, amount\n deposit , 1 , 1 , 1.5 ");
         assert!(matches!(
             events[0],
-            Event::Deposit {
+            Command::Deposit {
                 client: 1,
                 tx: 1,
                 ..
             }
         ));
         assert_eq!(
-            if let Event::Deposit { amount, .. } = events[0] {
+            if let Command::Deposit { amount, .. } = events[0] {
                 amount
             } else {
                 unreachable!()
@@ -162,7 +162,7 @@ mod test {
     #[test]
     fn test_large_amount_does_not_flip_sign() {
         let events = parse("type,client,tx,amount\ndeposit,1,1,922337203685477.5808");
-        let amount = if let Event::Deposit { amount, .. } = events[0] {
+        let amount = if let Command::Deposit { amount, .. } = events[0] {
             amount
         } else {
             unreachable!()

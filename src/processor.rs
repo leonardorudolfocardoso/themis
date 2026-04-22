@@ -2,13 +2,13 @@ use std::collections::HashMap;
 
 use crate::account::Account;
 use crate::amount::Amount;
-use crate::event::Event;
+use crate::command::Command;
 use crate::id::{ClientId, TransactionId};
 use crate::transaction::{Kind, Record, State};
 
-/// Processes a stream of transaction events and maintains account state.
+/// Processes a stream of transaction commands and maintains account state.
 ///
-/// `Processor` applies each [`Event`] to the corresponding [`Account`],
+/// `Processor` applies each [`Command`] to the corresponding [`Account`],
 /// enforcing all transaction rules:
 ///
 /// - Duplicate transaction IDs are silently ignored.
@@ -37,32 +37,32 @@ impl Processor {
     /// Consumes all events from `transactions` and returns the final account state.
     ///
     /// Each client account is created on first deposit or withdrawal.
-    pub fn process(mut self, transactions: impl Iterator<Item = Event>) -> HashMap<u16, Account> {
+    pub fn process(mut self, transactions: impl Iterator<Item = Command>) -> HashMap<u16, Account> {
         for transaction in transactions {
             self.apply(transaction);
         }
         self.accounts
     }
 
-    pub fn apply(&mut self, transaction: Event) -> ApplyResult {
+    pub fn apply(&mut self, transaction: Command) -> ApplyResult {
         match transaction {
-            Event::Deposit { client, tx, amount } => {
+            Command::Deposit { client, tx, amount } => {
                 if self.records.contains_key(&tx) {
                     ApplyResult::Ignored
                 } else {
                     self.deposit(client, tx, amount)
                 }
             }
-            Event::Withdrawal { client, tx, amount } => {
+            Command::Withdrawal { client, tx, amount } => {
                 if self.records.contains_key(&tx) {
                     ApplyResult::Ignored
                 } else {
                     self.withdraw(client, tx, amount)
                 }
             }
-            Event::Dispute { client, tx } => self.dispute(client, tx),
-            Event::Resolve { client, tx } => self.resolve(client, tx),
-            Event::Chargeback { client, tx } => self.chargeback(client, tx),
+            Command::Dispute { client, tx } => self.dispute(client, tx),
+            Command::Resolve { client, tx } => self.resolve(client, tx),
+            Command::Chargeback { client, tx } => self.chargeback(client, tx),
         }
     }
 
@@ -160,9 +160,9 @@ mod test {
     use super::Processor;
     use crate::account::Account;
     use crate::amount::Amount;
-    use crate::event::Event;
+    use crate::command::Command;
 
-    fn processor_with(transactions: Vec<Event>) -> Processor {
+    fn processor_with(transactions: Vec<Command>) -> Processor {
         let mut processor = Processor::new();
         for transaction in transactions {
             processor.apply(transaction);
@@ -178,7 +178,7 @@ mod test {
     fn test_deposit_is_applied() {
         let mut processor = Processor::new();
 
-        let result = processor.apply(Event::Deposit {
+        let result = processor.apply(Command::Deposit {
             client: 1,
             tx: 1,
             amount: Amount::raw(100),
@@ -192,13 +192,13 @@ mod test {
 
     #[test]
     fn test_withdrawal_is_applied() {
-        let mut processor = processor_with(vec![Event::Deposit {
+        let mut processor = processor_with(vec![Command::Deposit {
             client: 1,
             tx: 1,
             amount: Amount::raw(100),
         }]);
 
-        let result = processor.apply(Event::Withdrawal {
+        let result = processor.apply(Command::Withdrawal {
             client: 1,
             tx: 2,
             amount: Amount::raw(20),
@@ -212,13 +212,13 @@ mod test {
 
     #[test]
     fn test_duplicate_tx_id_is_ignored() {
-        let mut processor = processor_with(vec![Event::Deposit {
+        let mut processor = processor_with(vec![Command::Deposit {
             client: 1,
             tx: 1,
             amount: Amount::raw(100),
         }]);
 
-        let result = processor.apply(Event::Deposit {
+        let result = processor.apply(Command::Deposit {
             client: 1,
             tx: 1,
             amount: Amount::raw(999),
@@ -233,19 +233,19 @@ mod test {
     #[test]
     fn test_duplicate_withdrawal_tx_id_is_ignored() {
         let mut processor = processor_with(vec![
-            Event::Deposit {
+            Command::Deposit {
                 client: 1,
                 tx: 1,
                 amount: Amount::raw(100),
             },
-            Event::Withdrawal {
+            Command::Withdrawal {
                 client: 1,
                 tx: 2,
                 amount: Amount::raw(20),
             },
         ]);
 
-        let result = processor.apply(Event::Withdrawal {
+        let result = processor.apply(Command::Withdrawal {
             client: 1,
             tx: 2,
             amount: Amount::raw(20),
@@ -260,16 +260,16 @@ mod test {
     #[test]
     fn test_deposit_on_locked_account_is_ignored() {
         let mut processor = processor_with(vec![
-            Event::Deposit {
+            Command::Deposit {
                 client: 1,
                 tx: 1,
                 amount: Amount::raw(100),
             },
-            Event::Dispute { client: 1, tx: 1 },
-            Event::Chargeback { client: 1, tx: 1 },
+            Command::Dispute { client: 1, tx: 1 },
+            Command::Chargeback { client: 1, tx: 1 },
         ]);
 
-        let result = processor.apply(Event::Deposit {
+        let result = processor.apply(Command::Deposit {
             client: 1,
             tx: 2,
             amount: Amount::raw(50),
@@ -285,16 +285,16 @@ mod test {
     #[test]
     fn test_withdraw_locked_is_silently_ignored() {
         let mut processor = processor_with(vec![
-            Event::Deposit {
+            Command::Deposit {
                 client: 1,
                 tx: 1,
                 amount: Amount::raw(100),
             },
-            Event::Dispute { client: 1, tx: 1 },
-            Event::Chargeback { client: 1, tx: 1 },
+            Command::Dispute { client: 1, tx: 1 },
+            Command::Chargeback { client: 1, tx: 1 },
         ]);
 
-        let result = processor.apply(Event::Withdrawal {
+        let result = processor.apply(Command::Withdrawal {
             client: 1,
             tx: 2,
             amount: Amount::raw(50),
@@ -309,19 +309,19 @@ mod test {
     #[test]
     fn test_dispute_on_withdrawal_is_ignored() {
         let mut processor = processor_with(vec![
-            Event::Deposit {
+            Command::Deposit {
                 client: 1,
                 tx: 1,
                 amount: Amount::raw(100),
             },
-            Event::Withdrawal {
+            Command::Withdrawal {
                 client: 1,
                 tx: 2,
                 amount: Amount::raw(40),
             },
         ]);
 
-        let result = processor.apply(Event::Dispute { client: 1, tx: 2 });
+        let result = processor.apply(Command::Dispute { client: 1, tx: 2 });
 
         assert_eq!(result, ApplyResult::Ignored);
         let account = account(&processor, 1);
@@ -331,13 +331,13 @@ mod test {
 
     #[test]
     fn test_dispute_decreases_available_and_increases_held() {
-        let mut processor = processor_with(vec![Event::Deposit {
+        let mut processor = processor_with(vec![Command::Deposit {
             client: 1,
             tx: 1,
             amount: Amount::raw(100),
         }]);
 
-        let result = processor.apply(Event::Dispute { client: 1, tx: 1 });
+        let result = processor.apply(Command::Dispute { client: 1, tx: 1 });
 
         assert_eq!(result, ApplyResult::Applied);
         let account = account(&processor, 1);
@@ -348,13 +348,13 @@ mod test {
 
     #[test]
     fn test_dispute_on_wrong_client_is_ignored() {
-        let mut processor = processor_with(vec![Event::Deposit {
+        let mut processor = processor_with(vec![Command::Deposit {
             client: 1,
             tx: 1,
             amount: Amount::raw(100),
         }]);
 
-        let result = processor.apply(Event::Dispute { client: 2, tx: 1 });
+        let result = processor.apply(Command::Dispute { client: 2, tx: 1 });
 
         assert_eq!(result, ApplyResult::Ignored);
         let account = account(&processor, 1);
@@ -365,15 +365,15 @@ mod test {
     #[test]
     fn test_dispute_on_invalid_state_is_ignored() {
         let mut processor = processor_with(vec![
-            Event::Deposit {
+            Command::Deposit {
                 client: 1,
                 tx: 1,
                 amount: Amount::raw(100),
             },
-            Event::Dispute { client: 1, tx: 1 },
+            Command::Dispute { client: 1, tx: 1 },
         ]);
 
-        let result = processor.apply(Event::Dispute { client: 1, tx: 1 });
+        let result = processor.apply(Command::Dispute { client: 1, tx: 1 });
 
         assert_eq!(result, ApplyResult::Ignored);
         let account = account(&processor, 1);
@@ -384,21 +384,21 @@ mod test {
     #[test]
     fn test_dispute_on_locked_account_is_ignored() {
         let mut processor = processor_with(vec![
-            Event::Deposit {
+            Command::Deposit {
                 client: 1,
                 tx: 1,
                 amount: Amount::raw(100),
             },
-            Event::Deposit {
+            Command::Deposit {
                 client: 1,
                 tx: 2,
                 amount: Amount::raw(50),
             },
-            Event::Dispute { client: 1, tx: 1 },
-            Event::Chargeback { client: 1, tx: 1 },
+            Command::Dispute { client: 1, tx: 1 },
+            Command::Chargeback { client: 1, tx: 1 },
         ]);
 
-        let result = processor.apply(Event::Dispute { client: 1, tx: 2 });
+        let result = processor.apply(Command::Dispute { client: 1, tx: 2 });
 
         assert_eq!(result, ApplyResult::Ignored);
         let account = account(&processor, 1);
@@ -411,15 +411,15 @@ mod test {
     #[test]
     fn test_resolve_decreases_held_and_increases_available() {
         let mut processor = processor_with(vec![
-            Event::Deposit {
+            Command::Deposit {
                 client: 1,
                 tx: 1,
                 amount: Amount::raw(100),
             },
-            Event::Dispute { client: 1, tx: 1 },
+            Command::Dispute { client: 1, tx: 1 },
         ]);
 
-        let result = processor.apply(Event::Resolve { client: 1, tx: 1 });
+        let result = processor.apply(Command::Resolve { client: 1, tx: 1 });
 
         assert_eq!(result, ApplyResult::Applied);
         let account = account(&processor, 1);
@@ -430,13 +430,13 @@ mod test {
 
     #[test]
     fn test_resolve_without_dispute_is_ignored() {
-        let mut processor = processor_with(vec![Event::Deposit {
+        let mut processor = processor_with(vec![Command::Deposit {
             client: 1,
             tx: 1,
             amount: Amount::raw(100),
         }]);
 
-        let result = processor.apply(Event::Resolve { client: 1, tx: 1 });
+        let result = processor.apply(Command::Resolve { client: 1, tx: 1 });
 
         assert_eq!(result, ApplyResult::Ignored);
         let account = account(&processor, 1);
@@ -447,15 +447,15 @@ mod test {
     #[test]
     fn test_resolve_on_wrong_client_is_ignored() {
         let mut processor = processor_with(vec![
-            Event::Deposit {
+            Command::Deposit {
                 client: 1,
                 tx: 1,
                 amount: Amount::raw(100),
             },
-            Event::Dispute { client: 1, tx: 1 },
+            Command::Dispute { client: 1, tx: 1 },
         ]);
 
-        let result = processor.apply(Event::Resolve { client: 2, tx: 1 });
+        let result = processor.apply(Command::Resolve { client: 2, tx: 1 });
 
         assert_eq!(result, ApplyResult::Ignored);
         let account = account(&processor, 1);
@@ -466,16 +466,16 @@ mod test {
     #[test]
     fn test_resolve_on_already_resolved_is_ignored() {
         let mut processor = processor_with(vec![
-            Event::Deposit {
+            Command::Deposit {
                 client: 1,
                 tx: 1,
                 amount: Amount::raw(100),
             },
-            Event::Dispute { client: 1, tx: 1 },
-            Event::Resolve { client: 1, tx: 1 },
+            Command::Dispute { client: 1, tx: 1 },
+            Command::Resolve { client: 1, tx: 1 },
         ]);
 
-        let result = processor.apply(Event::Resolve { client: 1, tx: 1 });
+        let result = processor.apply(Command::Resolve { client: 1, tx: 1 });
 
         assert_eq!(result, ApplyResult::Ignored);
         let account = account(&processor, 1);
@@ -486,15 +486,15 @@ mod test {
     #[test]
     fn test_chargeback_locks_account_and_decreases_held_and_total() {
         let mut processor = processor_with(vec![
-            Event::Deposit {
+            Command::Deposit {
                 client: 1,
                 tx: 1,
                 amount: Amount::raw(100),
             },
-            Event::Dispute { client: 1, tx: 1 },
+            Command::Dispute { client: 1, tx: 1 },
         ]);
 
-        let result = processor.apply(Event::Chargeback { client: 1, tx: 1 });
+        let result = processor.apply(Command::Chargeback { client: 1, tx: 1 });
 
         assert_eq!(result, ApplyResult::Applied);
         let account = account(&processor, 1);
@@ -506,13 +506,13 @@ mod test {
 
     #[test]
     fn test_chargeback_without_dispute_is_ignored() {
-        let mut processor = processor_with(vec![Event::Deposit {
+        let mut processor = processor_with(vec![Command::Deposit {
             client: 1,
             tx: 1,
             amount: Amount::raw(100),
         }]);
 
-        let result = processor.apply(Event::Chargeback { client: 1, tx: 1 });
+        let result = processor.apply(Command::Chargeback { client: 1, tx: 1 });
 
         assert_eq!(result, ApplyResult::Ignored);
         let account = account(&processor, 1);
@@ -522,15 +522,15 @@ mod test {
     #[test]
     fn test_chargeback_on_wrong_client_is_ignored() {
         let mut processor = processor_with(vec![
-            Event::Deposit {
+            Command::Deposit {
                 client: 1,
                 tx: 1,
                 amount: Amount::raw(100),
             },
-            Event::Dispute { client: 1, tx: 1 },
+            Command::Dispute { client: 1, tx: 1 },
         ]);
 
-        let result = processor.apply(Event::Chargeback { client: 2, tx: 1 });
+        let result = processor.apply(Command::Chargeback { client: 2, tx: 1 });
 
         assert_eq!(result, ApplyResult::Ignored);
         let account = account(&processor, 1);
@@ -541,16 +541,16 @@ mod test {
     #[test]
     fn test_chargeback_on_already_chargedback_is_ignored() {
         let mut processor = processor_with(vec![
-            Event::Deposit {
+            Command::Deposit {
                 client: 1,
                 tx: 1,
                 amount: Amount::raw(100),
             },
-            Event::Dispute { client: 1, tx: 1 },
-            Event::Chargeback { client: 1, tx: 1 },
+            Command::Dispute { client: 1, tx: 1 },
+            Command::Chargeback { client: 1, tx: 1 },
         ]);
 
-        let result = processor.apply(Event::Chargeback { client: 1, tx: 1 });
+        let result = processor.apply(Command::Chargeback { client: 1, tx: 1 });
 
         assert_eq!(result, ApplyResult::Ignored);
         let account = account(&processor, 1);
@@ -563,18 +563,18 @@ mod test {
     fn test_resolve_after_withdrawal_is_correct() {
         // Deposit 100, withdraw 80 (total=20), dispute the deposit, resolve.
         let processor = processor_with(vec![
-            Event::Deposit {
+            Command::Deposit {
                 client: 1,
                 tx: 1,
                 amount: Amount::raw(100),
             },
-            Event::Withdrawal {
+            Command::Withdrawal {
                 client: 1,
                 tx: 2,
                 amount: Amount::raw(80),
             },
-            Event::Dispute { client: 1, tx: 1 },
-            Event::Resolve { client: 1, tx: 1 },
+            Command::Dispute { client: 1, tx: 1 },
+            Command::Resolve { client: 1, tx: 1 },
         ]);
         let account = account(&processor, 1);
         assert_eq!(account.available(), 20);
@@ -587,18 +587,18 @@ mod test {
         // Deposit 100, withdraw 80 (total=20), dispute the deposit, chargeback.
         // total = 20 - 100 = -80: the account owes the bank the withdrawn funds.
         let processor = processor_with(vec![
-            Event::Deposit {
+            Command::Deposit {
                 client: 1,
                 tx: 1,
                 amount: Amount::raw(100),
             },
-            Event::Withdrawal {
+            Command::Withdrawal {
                 client: 1,
                 tx: 2,
                 amount: Amount::raw(80),
             },
-            Event::Dispute { client: 1, tx: 1 },
-            Event::Chargeback { client: 1, tx: 1 },
+            Command::Dispute { client: 1, tx: 1 },
+            Command::Chargeback { client: 1, tx: 1 },
         ]);
         let account = account(&processor, 1);
         assert_eq!(account.available(), -80);

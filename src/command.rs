@@ -3,12 +3,12 @@ use crate::{
     id::{ClientId, TransactionId},
 };
 
-/// A transaction event parsed from the input stream.
+/// A transaction command.
 ///
-/// Each variant corresponds to one row in the CSV input. All variants carry
+/// All variants carry
 /// `client` (the account owner) and `tx` (the transaction ID). Deposit and
 /// withdrawal variants also carry `amount`.
-pub enum Event {
+pub enum Command {
     /// Credits `amount` to the client's account.
     Deposit {
         /// The account owner.
