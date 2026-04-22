@@ -4,7 +4,6 @@ use crate::command::Command;
 use crate::event::Event;
 use crate::id::ClientId;
 use crate::projection::LedgerProjection;
-use crate::transaction::State;
 
 /// Processes a stream of transaction commands and maintains account state.
 ///
@@ -146,15 +145,17 @@ impl Processor {
             _ => return ApplyResult::Ignored,
         };
 
-        if let Some(account) = self.projection.account_mut(client)
-            && account.chargeback(amount).is_ok()
-            && let Some(record) = self.projection.record_mut(tx)
+        if self
+            .projection
+            .account(client)
+            .is_some_and(|account| account.locked())
         {
-            record.state = State::Chargedback;
-            ApplyResult::Applied
-        } else {
-            ApplyResult::Ignored
+            return ApplyResult::Ignored;
         }
+
+        self.projection
+            .apply(Event::DepositChargedBack { client, tx, amount });
+        ApplyResult::Applied
     }
 }
 
