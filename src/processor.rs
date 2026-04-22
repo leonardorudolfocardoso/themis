@@ -26,6 +26,11 @@ pub enum ApplyResult {
     Ignored,
 }
 
+enum Decision {
+    Apply(Event),
+    Ignore,
+}
+
 impl Processor {
     /// Creates a new processor with no accounts or transaction history.
     pub fn new() -> Self {
@@ -51,56 +56,62 @@ impl Processor {
     }
 
     pub fn apply(&mut self, transaction: Command) -> ApplyResult {
+        match self.decide(transaction) {
+            Decision::Apply(event) => {
+                self.projection.apply(event);
+                ApplyResult::Applied
+            }
+            Decision::Ignore => ApplyResult::Ignored,
+        }
+    }
+
+    fn decide(&mut self, transaction: Command) -> Decision {
         match transaction {
             Command::Deposit { client, tx, amount } => {
                 if self.projection.has_record(tx) {
-                    ApplyResult::Ignored
+                    Decision::Ignore
                 } else {
-                    self.deposit(client, tx, amount)
+                    self.decide_deposit(client, tx, amount)
                 }
             }
             Command::Withdrawal { client, tx, amount } => {
                 if self.projection.has_record(tx) {
-                    ApplyResult::Ignored
+                    Decision::Ignore
                 } else {
-                    self.withdraw(client, tx, amount)
+                    self.decide_withdrawal(client, tx, amount)
                 }
             }
-            Command::Dispute { client, tx } => self.dispute(client, tx),
-            Command::Resolve { client, tx } => self.resolve(client, tx),
-            Command::Chargeback { client, tx } => self.chargeback(client, tx),
+            Command::Dispute { client, tx } => self.decide_dispute(client, tx),
+            Command::Resolve { client, tx } => self.decide_resolve(client, tx),
+            Command::Chargeback { client, tx } => self.decide_chargeback(client, tx),
         }
     }
 
-    fn deposit(&mut self, client: u16, tx: u32, amount: Amount) -> ApplyResult {
+    fn decide_deposit(&mut self, client: u16, tx: u32, amount: Amount) -> Decision {
         if self
             .projection
             .account(client)
             .is_some_and(|account| account.locked())
         {
-            return ApplyResult::Ignored;
+            return Decision::Ignore;
         }
 
-        self.projection
-            .apply(Event::DepositAccepted { client, tx, amount });
-        ApplyResult::Applied
+        Decision::Apply(Event::DepositAccepted { client, tx, amount })
     }
 
-    fn withdraw(&mut self, client: u16, tx: u32, amount: Amount) -> ApplyResult {
+    fn decide_withdrawal(&mut self, client: u16, tx: u32, amount: Amount) -> Decision {
         let account = self.projection.account_mut_or_create(client);
         if account.locked() || account.available() < amount {
-            return ApplyResult::Ignored;
+            return Decision::Ignore;
         }
 
-        self.projection
-            .apply(Event::WithdrawalAccepted { client, tx, amount });
-        ApplyResult::Applied
+        Decision::Apply(Event::WithdrawalAccepted { client, tx, amount })
     }
 
-    fn dispute(&mut self, client: u16, tx: u32) -> ApplyResult {
+    fn decide_dispute(&mut self, client: u16, tx: u32) -> Decision {
         let amount = match self.projection.record(tx) {
             Some(record) if record.client == client && record.is_disputable() => record.amount,
-            _ => return ApplyResult::Ignored,
+            _ => return Decision::Ignore,
         };
 
         if self
@@ -108,20 +119,18 @@ impl Processor {
             .account(client)
             .is_some_and(|account| account.locked())
         {
-            return ApplyResult::Ignored;
+            return Decision::Ignore;
         }
 
-        self.projection
-            .apply(Event::DepositDisputed { client, tx, amount });
-        ApplyResult::Applied
+        Decision::Apply(Event::DepositDisputed { client, tx, amount })
     }
 
-    fn resolve(&mut self, client: u16, tx: u32) -> ApplyResult {
+    fn decide_resolve(&mut self, client: u16, tx: u32) -> Decision {
         let amount = match self.projection.record(tx) {
             Some(record) if record.client == client && record.state.is_resolvable() => {
                 record.amount
             }
-            _ => return ApplyResult::Ignored,
+            _ => return Decision::Ignore,
         };
 
         if self
@@ -129,20 +138,18 @@ impl Processor {
             .account(client)
             .is_some_and(|account| account.locked())
         {
-            return ApplyResult::Ignored;
+            return Decision::Ignore;
         }
 
-        self.projection
-            .apply(Event::DisputeResolved { client, tx, amount });
-        ApplyResult::Applied
+        Decision::Apply(Event::DisputeResolved { client, tx, amount })
     }
 
-    fn chargeback(&mut self, client: u16, tx: u32) -> ApplyResult {
+    fn decide_chargeback(&mut self, client: u16, tx: u32) -> Decision {
         let amount = match self.projection.record(tx) {
             Some(record) if record.client == client && record.state.is_chargebackable() => {
                 record.amount
             }
-            _ => return ApplyResult::Ignored,
+            _ => return Decision::Ignore,
         };
 
         if self
@@ -150,12 +157,10 @@ impl Processor {
             .account(client)
             .is_some_and(|account| account.locked())
         {
-            return ApplyResult::Ignored;
+            return Decision::Ignore;
         }
 
-        self.projection
-            .apply(Event::DepositChargedBack { client, tx, amount });
-        ApplyResult::Applied
+        Decision::Apply(Event::DepositChargedBack { client, tx, amount })
     }
 }
 
