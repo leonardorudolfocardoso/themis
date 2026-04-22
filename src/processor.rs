@@ -104,15 +104,17 @@ impl Processor {
             _ => return ApplyResult::Ignored,
         };
 
-        if let Some(account) = self.projection.account_mut(client)
-            && account.hold(amount).is_ok()
-            && let Some(record) = self.projection.record_mut(tx)
+        if self
+            .projection
+            .account(client)
+            .is_some_and(|account| account.locked())
         {
-            record.state = State::Disputed;
-            ApplyResult::Applied
-        } else {
-            ApplyResult::Ignored
+            return ApplyResult::Ignored;
         }
+
+        self.projection
+            .apply(Event::DepositDisputed { client, tx, amount });
+        ApplyResult::Applied
     }
 
     fn resolve(&mut self, client: u16, tx: u32) -> ApplyResult {
