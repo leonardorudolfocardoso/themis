@@ -1,6 +1,8 @@
 use crate::account::Account;
 use crate::command::Command;
 use crate::decider::{Decider, Decision};
+use crate::event::Event;
+use crate::event_log::EventLog;
 use crate::id::ClientId;
 use crate::projection::LedgerProjection;
 
@@ -16,6 +18,7 @@ use crate::projection::LedgerProjection;
 /// - All operations on locked accounts are silently ignored.
 #[derive(Default)]
 pub struct Processor {
+    events: EventLog,
     projection: LedgerProjection,
 }
 
@@ -49,9 +52,15 @@ impl Processor {
         self.projection.account(client)
     }
 
+    /// Returns accepted ledger events in the order they were applied.
+    pub fn events(&self) -> &[Event] {
+        self.events.events()
+    }
+
     pub fn apply(&mut self, transaction: Command) -> ApplyResult {
         match Decider::decide(&self.projection, transaction) {
             Decision::Apply(event) => {
+                self.events.append(event);
                 self.projection.apply(event);
                 ApplyResult::Applied
             }
@@ -67,6 +76,7 @@ mod test {
     use crate::account::Account;
     use crate::amount::Amount;
     use crate::command::Command;
+    use crate::event::Event;
 
     fn processor_with(transactions: Vec<Command>) -> Processor {
         let mut processor = Processor::new();
@@ -94,6 +104,31 @@ mod test {
         let account = account(&processor, 1);
         assert_eq!(account.available(), 100);
         assert_eq!(account.total(), 100);
+    }
+
+    #[test]
+    fn test_accepted_events_are_recorded() {
+        let mut processor = Processor::new();
+
+        processor.apply(Command::Deposit {
+            client: 1,
+            tx: 1,
+            amount: Amount::raw(100),
+        });
+        processor.apply(Command::Deposit {
+            client: 1,
+            tx: 1,
+            amount: Amount::raw(999),
+        });
+
+        assert_eq!(
+            processor.events(),
+            &[Event::DepositAccepted {
+                client: 1,
+                tx: 1,
+                amount: Amount::raw(100)
+            }]
+        );
     }
 
     #[test]

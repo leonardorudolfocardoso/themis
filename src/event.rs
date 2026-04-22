@@ -10,6 +10,7 @@ use crate::id::TransactionId;
 ///
 /// Events are the source for rebuilding account balances and transaction
 /// lifecycle state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Event {
     DepositAccepted {
         client: ClientId,

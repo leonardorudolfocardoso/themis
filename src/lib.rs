@@ -6,6 +6,7 @@ mod command;
 mod csv;
 mod decider;
 mod event;
+mod event_log;
 mod funds;
 mod id;
 mod processor;
