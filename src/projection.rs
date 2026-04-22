@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
+use crate::Event;
 use crate::account::Account;
 use crate::id::{ClientId, TransactionId};
-use crate::transaction::Record;
+use crate::transaction::{Kind, Record, State};
 
 #[derive(Default)]
 pub(crate) struct LedgerProjection {
@@ -11,6 +12,50 @@ pub(crate) struct LedgerProjection {
 }
 
 impl LedgerProjection {
+    pub(crate) fn apply(&mut self, event: Event) {
+        match event {
+            Event::DepositAccepted { client, tx, amount } => {
+                let account = self.account_mut_or_create(client);
+                account
+                    .deposit(amount)
+                    .expect("DepositAccepted must target an unlocked account");
+
+                self.insert_record(
+                    tx,
+                    Record {
+                        client,
+                        amount,
+                        kind: Kind::Deposit,
+                        state: State::Valid,
+                    },
+                );
+            }
+            Event::WithdrawalAccepted { client, tx, amount } => {
+                let account = self
+                    .account_mut(client)
+                    .expect("WithdrawalAccepted must target an existing account");
+
+                account
+                    .withdraw(amount)
+                    .expect("WithdrawalAccepted must target an account with enough funds");
+
+                self.insert_record(
+                    tx,
+                    Record {
+                        client,
+                        amount,
+                        kind: Kind::Withdrawal,
+                        state: State::Valid,
+                    },
+                );
+            }
+            Event::DepositDisputed { .. }
+            | Event::DisputeResolved { .. }
+            | Event::DepositChargedBack { .. } => {
+                unreachable!("only deposits and withdrawals are projected through events yet")
+            }
+        }
+    }
     pub(crate) fn account(&self, client: ClientId) -> Option<&Account> {
         self.accounts.get(&client)
     }

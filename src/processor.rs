@@ -1,9 +1,10 @@
 use crate::account::Account;
 use crate::amount::Amount;
 use crate::command::Command;
+use crate::event::Event;
 use crate::id::ClientId;
 use crate::projection::LedgerProjection;
-use crate::transaction::{Kind, Record, State};
+use crate::transaction::State;
 
 /// Processes a stream of transaction commands and maintains account state.
 ///
@@ -73,42 +74,28 @@ impl Processor {
     }
 
     fn deposit(&mut self, client: u16, tx: u32, amount: Amount) -> ApplyResult {
-        let account = self.projection.account_mut_or_create(client);
-
-        if account.deposit(amount).is_ok() {
-            self.projection.insert_record(
-                tx,
-                Record {
-                    client,
-                    amount,
-                    kind: Kind::Deposit,
-                    state: State::Valid,
-                },
-            );
-
-            ApplyResult::Applied
-        } else {
-            ApplyResult::Ignored
+        if self
+            .projection
+            .account(client)
+            .is_some_and(|account| account.locked())
+        {
+            return ApplyResult::Ignored;
         }
+
+        self.projection
+            .apply(Event::DepositAccepted { client, tx, amount });
+        ApplyResult::Applied
     }
 
     fn withdraw(&mut self, client: u16, tx: u32, amount: Amount) -> ApplyResult {
         let account = self.projection.account_mut_or_create(client);
-        if account.withdraw(amount).is_ok() {
-            self.projection.insert_record(
-                tx,
-                Record {
-                    client,
-                    amount,
-                    kind: Kind::Withdrawal,
-                    state: State::Valid,
-                },
-            );
-
-            ApplyResult::Applied
-        } else {
-            ApplyResult::Ignored
+        if account.locked() || account.available() < amount {
+            return ApplyResult::Ignored;
         }
+
+        self.projection
+            .apply(Event::WithdrawalAccepted { client, tx, amount });
+        ApplyResult::Applied
     }
 
     fn dispute(&mut self, client: u16, tx: u32) -> ApplyResult {
