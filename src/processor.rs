@@ -1,9 +1,8 @@
-use std::collections::HashMap;
-
 use crate::account::Account;
 use crate::amount::Amount;
 use crate::command::Command;
-use crate::id::{ClientId, TransactionId};
+use crate::id::ClientId;
+use crate::projection::LedgerProjection;
 use crate::transaction::{Kind, Record, State};
 
 /// Processes a stream of transaction commands and maintains account state.
@@ -18,8 +17,7 @@ use crate::transaction::{Kind, Record, State};
 /// - All operations on locked accounts are silently ignored.
 #[derive(Default)]
 pub struct Processor {
-    accounts: HashMap<ClientId, Account>,
-    records: HashMap<TransactionId, Record>,
+    projection: LedgerProjection,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,24 +35,32 @@ impl Processor {
     /// Consumes all events from `transactions` and returns the final account state.
     ///
     /// Each client account is created on first deposit or withdrawal.
-    pub fn process(mut self, transactions: impl Iterator<Item = Command>) -> HashMap<u16, Account> {
+    pub fn process(
+        mut self,
+        transactions: impl Iterator<Item = Command>,
+    ) -> std::collections::HashMap<u16, Account> {
         for transaction in transactions {
             self.apply(transaction);
         }
-        self.accounts
+        self.projection.into_accounts()
+    }
+
+    /// Returns the current account state for `client`, if it exists.
+    pub fn account(&self, client: ClientId) -> Option<&Account> {
+        self.projection.account(client)
     }
 
     pub fn apply(&mut self, transaction: Command) -> ApplyResult {
         match transaction {
             Command::Deposit { client, tx, amount } => {
-                if self.records.contains_key(&tx) {
+                if self.projection.has_record(tx) {
                     ApplyResult::Ignored
                 } else {
                     self.deposit(client, tx, amount)
                 }
             }
             Command::Withdrawal { client, tx, amount } => {
-                if self.records.contains_key(&tx) {
+                if self.projection.has_record(tx) {
                     ApplyResult::Ignored
                 } else {
                     self.withdraw(client, tx, amount)
@@ -67,13 +73,10 @@ impl Processor {
     }
 
     fn deposit(&mut self, client: u16, tx: u32, amount: Amount) -> ApplyResult {
-        let account = self
-            .accounts
-            .entry(client)
-            .or_insert_with(|| Account::new(client));
+        let account = self.projection.account_mut_or_create(client);
 
         if account.deposit(amount).is_ok() {
-            self.records.insert(
+            self.projection.insert_record(
                 tx,
                 Record {
                     client,
@@ -90,12 +93,9 @@ impl Processor {
     }
 
     fn withdraw(&mut self, client: u16, tx: u32, amount: Amount) -> ApplyResult {
-        let account = self
-            .accounts
-            .entry(client)
-            .or_insert_with(|| Account::new(client));
+        let account = self.projection.account_mut_or_create(client);
         if account.withdraw(amount).is_ok() {
-            self.records.insert(
+            self.projection.insert_record(
                 tx,
                 Record {
                     client,
@@ -112,11 +112,14 @@ impl Processor {
     }
 
     fn dispute(&mut self, client: u16, tx: u32) -> ApplyResult {
-        if let Some(record) = self.records.get_mut(&tx)
-            && record.client == client
-            && record.is_disputable()
-            && let Some(account) = self.accounts.get_mut(&client)
-            && account.hold(record.amount).is_ok()
+        let amount = match self.projection.record(tx) {
+            Some(record) if record.client == client && record.is_disputable() => record.amount,
+            _ => return ApplyResult::Ignored,
+        };
+
+        if let Some(account) = self.projection.account_mut(client)
+            && account.hold(amount).is_ok()
+            && let Some(record) = self.projection.record_mut(tx)
         {
             record.state = State::Disputed;
             ApplyResult::Applied
@@ -126,11 +129,16 @@ impl Processor {
     }
 
     fn resolve(&mut self, client: u16, tx: u32) -> ApplyResult {
-        if let Some(record) = self.records.get_mut(&tx)
-            && record.client == client
-            && record.state.is_resolvable()
-            && let Some(account) = self.accounts.get_mut(&client)
-            && account.release(record.amount).is_ok()
+        let amount = match self.projection.record(tx) {
+            Some(record) if record.client == client && record.state.is_resolvable() => {
+                record.amount
+            }
+            _ => return ApplyResult::Ignored,
+        };
+
+        if let Some(account) = self.projection.account_mut(client)
+            && account.release(amount).is_ok()
+            && let Some(record) = self.projection.record_mut(tx)
         {
             record.state = State::Resolved;
             ApplyResult::Applied
@@ -140,11 +148,16 @@ impl Processor {
     }
 
     fn chargeback(&mut self, client: u16, tx: u32) -> ApplyResult {
-        if let Some(record) = self.records.get_mut(&tx)
-            && record.client == client
-            && record.state.is_chargebackable()
-            && let Some(account) = self.accounts.get_mut(&client)
-            && account.chargeback(record.amount).is_ok()
+        let amount = match self.projection.record(tx) {
+            Some(record) if record.client == client && record.state.is_chargebackable() => {
+                record.amount
+            }
+            _ => return ApplyResult::Ignored,
+        };
+
+        if let Some(account) = self.projection.account_mut(client)
+            && account.chargeback(amount).is_ok()
+            && let Some(record) = self.projection.record_mut(tx)
         {
             record.state = State::Chargedback;
             ApplyResult::Applied
@@ -171,7 +184,7 @@ mod test {
     }
 
     fn account(processor: &Processor, client: u16) -> &Account {
-        processor.accounts.get(&client).expect("account not found")
+        processor.account(client).expect("account not found")
     }
 
     #[test]

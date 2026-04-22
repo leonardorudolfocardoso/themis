@@ -41,7 +41,7 @@ impl TryFrom<RawEvent> for Command {
     }
 }
 
-/// Parses a CSV stream into an iterator of `Command`s.
+/// Parses a CSV stream into an iterator of [`Command`]s.
 ///
 /// Rows that cannot be deserialized or converted to a known event type are
 /// silently skipped. Leading and trailing whitespace is trimmed from all fields.
@@ -121,7 +121,10 @@ mod test {
     #[test]
     fn test_parse_chargeback() {
         let events = parse("type,client,tx,amount\nchargeback,1,1,");
-        assert!(matches!(events[0], Command::Chargeback { client: 1, tx: 1 }));
+        assert!(matches!(
+            events[0],
+            Command::Chargeback { client: 1, tx: 1 }
+        ));
     }
 
     #[test]

@@ -2,17 +2,18 @@
 mod account;
 mod amount;
 mod balance;
-mod csv;
 mod command;
+mod csv;
 mod funds;
 mod id;
 mod processor;
+mod projection;
 mod transaction;
 
 pub use account::Account;
 pub use amount::Amount;
+pub use command::Command;
 pub use csv::from_reader;
 pub use csv::to_writer;
-pub use command::Command;
 pub use processor::ApplyResult;
 pub use processor::Processor;
