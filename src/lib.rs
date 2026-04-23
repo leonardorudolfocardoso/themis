@@ -1,4 +1,4 @@
-//! A financial transaction ledger that reads CSV event streams and outputs account balances.
+//! A financial transaction ledger that reads CSV command streams and outputs account balances.
 mod account;
 mod amount;
 mod balance;
