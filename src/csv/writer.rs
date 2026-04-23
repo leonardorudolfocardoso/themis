@@ -42,8 +42,8 @@ pub fn to_writer(writer: impl std::io::Write, accounts: impl Iterator<Item = Acc
 mod test {
     use super::*;
     use crate::amount::Amount;
-    use crate::event::Event;
-    use crate::processor::Processor;
+    use crate::command::Command;
+    use crate::ledger::Ledger;
 
     fn account_with(
         client: u16,
@@ -51,18 +51,18 @@ mod test {
         held: u64,
         locked: bool,
     ) -> crate::account::Account {
-        let mut events: Vec<Event> = vec![Event::Deposit {
+        let mut events: Vec<Command> = vec![Command::Deposit {
             client,
             tx: 1,
             amount: Amount::raw((available + held as i64) as u64),
         }];
         if held > 0 {
-            events.push(Event::Dispute { client, tx: 1 });
+            events.push(Command::Dispute { client, tx: 1 });
         }
         if locked {
-            events.push(Event::Chargeback { client, tx: 1 });
+            events.push(Command::Chargeback { client, tx: 1 });
         }
-        Processor::new()
+        Ledger::new()
             .process(events.into_iter())
             .remove(&client)
             .unwrap()

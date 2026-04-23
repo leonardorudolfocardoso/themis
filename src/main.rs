@@ -1,8 +1,8 @@
 use std::{env, error::Error, fs::File, io};
-use themis::{Processor, from_reader, to_writer};
+use themis::{Ledger, from_reader, to_writer};
 
 fn run(input: impl io::Read, output: impl io::Write) {
-    let accounts = Processor::new().process(from_reader(input));
+    let accounts = Ledger::new().process(from_reader(input));
     to_writer(output, accounts.into_values());
 }
 

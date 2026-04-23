@@ -1,52 +1,60 @@
-use crate::{
-    amount::Amount,
-    id::{ClientId, TransactionId},
-};
+use crate::Amount;
+use crate::id::ClientId;
+use crate::id::TransactionId;
 
-/// A transaction event parsed from the input stream.
+/// A ledger event accepted by Themis.
 ///
-/// Each variant corresponds to one row in the CSV input. All variants carry
-/// `client` (the account owner) and `tx` (the transaction ID). Deposit and
-/// withdrawal variants also carry `amount`.
+/// Unlike [`Command`](crate::Command), which represents a request from outside
+/// the system, an `Event` represents a fact that passed business validation and
+/// should be applied to the ledger projection.
+///
+/// Events are the source for rebuilding account balances and transaction
+/// lifecycle state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Event {
-    /// Credits `amount` to the client's account.
-    Deposit {
+    /// A deposit command accepted into the ledger.
+    DepositAccepted {
         /// The account owner.
         client: ClientId,
-        /// The transaction ID.
+        /// The accepted transaction ID.
         tx: TransactionId,
-        /// The amount to credit.
+        /// The accepted deposit amount.
         amount: Amount,
     },
-    /// Debits `amount` from the client's account.
-    Withdrawal {
+    /// A withdrawal command accepted into the ledger.
+    WithdrawalAccepted {
         /// The account owner.
         client: ClientId,
-        /// The transaction ID.
+        /// The accepted transaction ID.
         tx: TransactionId,
-        /// The amount to debit.
+        /// The accepted withdrawal amount.
         amount: Amount,
     },
-    /// Opens a dispute on transaction `tx`, freezing the associated funds.
-    Dispute {
+    /// A dispute accepted for an existing deposit.
+    DepositDisputed {
         /// The account owner.
         client: ClientId,
-        /// The transaction being disputed.
+        /// The disputed deposit transaction ID.
         tx: TransactionId,
+        /// The disputed deposit amount.
+        amount: Amount,
     },
-    /// Resolves the dispute on transaction `tx`, releasing the frozen funds.
-    Resolve {
+    /// A dispute resolution accepted for an existing disputed deposit.
+    DisputeResolved {
         /// The account owner.
         client: ClientId,
-        /// The transaction being resolved.
+        /// The resolved deposit transaction ID.
         tx: TransactionId,
+        /// The resolved deposit amount.
+        amount: Amount,
     },
-    /// Finalises the dispute on transaction `tx` in the client's favour,
-    /// permanently deducting the frozen funds and locking the account.
-    Chargeback {
+    /// A chargeback accepted for an existing disputed deposit.
+    DepositChargedBack {
         /// The account owner.
         client: ClientId,
-        /// The transaction being charged back.
+        /// The charged-back deposit transaction ID.
         tx: TransactionId,
+        /// The charged-back deposit amount.
+        amount: Amount,
     },
 }
