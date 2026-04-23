@@ -3,15 +3,32 @@ use crate::command::Command;
 use crate::event::Event;
 use crate::projection::LedgerProjection;
 
+/// The result of evaluating a [`Command`] against the current ledger state.
+///
+/// A command either becomes one accepted [`Event`] or is ignored without
+/// changing ledger state.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Decision {
+    /// The command passed business validation and should be recorded.
     Apply(Event),
+    /// The command is invalid for the current state and should do nothing.
     Ignore,
 }
 
+/// Decides whether transaction commands should become accepted ledger events.
+///
+/// `Decider` owns business rule checks that require current ledger state, such
+/// as duplicate transaction IDs, locked accounts, available funds, transaction
+/// ownership, and dispute lifecycle state. It does not change state itself;
+/// [`Ledger`](crate::Ledger) coordinates the state change after receiving a
+/// [`Decision::Apply`].
 pub(crate) struct Decider;
 
 impl Decider {
+    /// Evaluates `transaction` against the current ledger state.
+    ///
+    /// Returns [`Decision::Apply`] with the accepted event when the command is
+    /// valid for the current state, otherwise returns [`Decision::Ignore`].
     pub(crate) fn decide(projection: &LedgerProjection, transaction: Command) -> Decision {
         match transaction {
             Command::Deposit { client, tx, amount } => {

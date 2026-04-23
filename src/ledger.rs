@@ -10,7 +10,7 @@ use crate::projection::LedgerProjection;
 ///
 /// `Ledger` decides whether each [`Command`] should produce an accepted
 /// [`Event`], records accepted events, and applies them to the current
-/// [`LedgerProjection`].
+/// ledger projection.
 ///
 /// - Duplicate transaction IDs are silently ignored.
 /// - Only deposits can be disputed; disputes on withdrawals are ignored.
@@ -23,9 +23,12 @@ pub struct Ledger {
     projection: LedgerProjection,
 }
 
+/// The outcome of applying one [`Command`] to the [`Ledger`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ApplyResult {
+    /// The command produced an accepted event and changed ledger state.
     Applied,
+    /// The command was invalid for the current state and changed nothing.
     Ignored,
 }
 
@@ -58,6 +61,11 @@ impl Ledger {
         self.events.events()
     }
 
+    /// Applies one command to the ledger.
+    ///
+    /// Accepted commands are appended to the event log and projected into
+    /// account state. Ignored commands leave both event history and projected
+    /// state unchanged.
     pub fn apply(&mut self, transaction: Command) -> ApplyResult {
         match Decider::decide(&self.projection, transaction) {
             Decision::Apply(event) => {
