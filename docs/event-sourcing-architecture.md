@@ -40,7 +40,7 @@ flowchart TD
 
     Decider[Ledger / Decider<br/>checks rules against current projection]
 
-    Event[Event<br/>DepositAccepted, WithdrawalAccepted,<br/>DepositDisputed, DisputeResolved,<br/>DepositChargedBack]
+    Event[Event<br/>Deposit, Withdrawal,<br/>DepositDisputed, DisputeResolved,<br/>DepositChargedBack]
 
     Projection[Ledger Projection<br/>accounts + transaction records]
 
@@ -77,8 +77,8 @@ sequenceDiagram
     Input->>Ledger: Command::Deposit(client=1, tx=10, amount=100)
     Ledger->>Projection: has tx=10? is account locked?
     Projection-->>Ledger: no duplicate, account open
-    Ledger->>Log: append Event::DepositAccepted
-    Log->>Projection: apply Event::DepositAccepted
+    Ledger->>Log: append Event::Deposit
+    Log->>Projection: apply Event::Deposit
     Projection-->>Projection: available += 100, record tx=10
 ```
 
@@ -88,8 +88,8 @@ The external input type is `Command`, and accepted ledger facts are `Event`s:
 
 ```rust
 pub enum Event {
-    DepositAccepted { client, tx, amount },
-    WithdrawalAccepted { client, tx, amount },
+    Deposit { client, tx, amount },
+    Withdrawal { client, tx, amount },
     DepositDisputed { client, tx, amount },
     DisputeResolved { client, tx, amount },
     DepositChargedBack { client, tx, amount },

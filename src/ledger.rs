@@ -107,16 +107,16 @@ mod test {
         }
     }
 
-    fn deposit_accepted(client: u16, tx: u32, amount: u64) -> Event {
-        Event::DepositAccepted {
+    fn deposit_event(client: u16, tx: u32, amount: u64) -> Event {
+        Event::Deposit {
             client,
             tx,
             amount: Amount::raw(amount),
         }
     }
 
-    fn withdrawal_accepted(client: u16, tx: u32, amount: u64) -> Event {
-        Event::WithdrawalAccepted {
+    fn withdrawal_event(client: u16, tx: u32, amount: u64) -> Event {
+        Event::Withdrawal {
             client,
             tx,
             amount: Amount::raw(amount),
@@ -132,7 +132,7 @@ mod test {
 
         assert_eq!(
             ledger.events(),
-            &[deposit_accepted(1, 1, 100), withdrawal_accepted(1, 2, 40)]
+            &[deposit_event(1, 1, 100), withdrawal_event(1, 2, 40)]
         );
 
         let account = account(&ledger, 1);

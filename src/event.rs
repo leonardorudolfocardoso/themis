@@ -13,7 +13,7 @@ use crate::id::TransactionId;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Event {
     /// A deposit command accepted into the ledger.
-    DepositAccepted {
+    Deposit {
         /// The account owner.
         client: ClientId,
         /// The accepted transaction ID.
@@ -22,7 +22,7 @@ pub enum Event {
         amount: Amount,
     },
     /// A withdrawal command accepted into the ledger.
-    WithdrawalAccepted {
+    Withdrawal {
         /// The account owner.
         client: ClientId,
         /// The accepted transaction ID.

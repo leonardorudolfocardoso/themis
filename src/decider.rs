@@ -64,7 +64,7 @@ impl Decider {
             return Decision::Ignore;
         }
 
-        Decision::Apply(Event::DepositAccepted { client, tx, amount })
+        Decision::Apply(Event::Deposit { client, tx, amount })
     }
 
     fn decide_withdrawal(
@@ -81,7 +81,7 @@ impl Decider {
             return Decision::Ignore;
         }
 
-        Decision::Apply(Event::WithdrawalAccepted { client, tx, amount })
+        Decision::Apply(Event::Withdrawal { client, tx, amount })
     }
 
     fn decide_dispute(projection: &LedgerProjection, client: u16, tx: u32) -> Decision {
@@ -173,16 +173,16 @@ mod test {
         }
     }
 
-    fn deposit_accepted(client: u16, tx: u32, amount: u64) -> Event {
-        Event::DepositAccepted {
+    fn deposit_event(client: u16, tx: u32, amount: u64) -> Event {
+        Event::Deposit {
             client,
             tx,
             amount: Amount::raw(amount),
         }
     }
 
-    fn withdrawal_accepted(client: u16, tx: u32, amount: u64) -> Event {
-        Event::WithdrawalAccepted {
+    fn withdrawal_event(client: u16, tx: u32, amount: u64) -> Event {
+        Event::Withdrawal {
             client,
             tx,
             amount: Amount::raw(amount),
@@ -217,14 +217,14 @@ mod test {
     fn test_deposit_is_accepted_for_new_transaction() {
         assert_eq!(
             decide_with_previous_events(&[], deposit(1, 1, 100)),
-            Decision::Apply(deposit_accepted(1, 1, 100))
+            Decision::Apply(deposit_event(1, 1, 100))
         );
     }
 
     #[test]
     fn test_duplicate_deposit_is_ignored() {
         assert_eq!(
-            decide_with_previous_events(&[deposit_accepted(1, 1, 100)], deposit(1, 1, 999),),
+            decide_with_previous_events(&[deposit_event(1, 1, 100)], deposit(1, 1, 999),),
             Decision::Ignore
         );
     }
@@ -232,8 +232,8 @@ mod test {
     #[test]
     fn test_withdrawal_is_accepted_when_account_has_enough_available_funds() {
         assert_eq!(
-            decide_with_previous_events(&[deposit_accepted(1, 1, 100)], withdrawal(1, 2, 60),),
-            Decision::Apply(withdrawal_accepted(1, 2, 60))
+            decide_with_previous_events(&[deposit_event(1, 1, 100)], withdrawal(1, 2, 60),),
+            Decision::Apply(withdrawal_event(1, 2, 60))
         );
     }
 
@@ -248,7 +248,7 @@ mod test {
     #[test]
     fn test_withdrawal_is_ignored_without_enough_available_funds() {
         assert_eq!(
-            decide_with_previous_events(&[deposit_accepted(1, 1, 50)], withdrawal(1, 2, 60),),
+            decide_with_previous_events(&[deposit_event(1, 1, 50)], withdrawal(1, 2, 60),),
             Decision::Ignore
         );
     }
@@ -257,7 +257,7 @@ mod test {
     fn test_dispute_is_accepted_for_valid_deposit_owned_by_client() {
         assert_eq!(
             decide_with_previous_events(
-                &[deposit_accepted(1, 1, 100)],
+                &[deposit_event(1, 1, 100)],
                 Command::Dispute { client: 1, tx: 1 },
             ),
             Decision::Apply(deposit_disputed(1, 1, 100))
@@ -268,7 +268,7 @@ mod test {
     fn test_dispute_is_ignored_for_withdrawal() {
         assert_eq!(
             decide_with_previous_events(
-                &[deposit_accepted(1, 1, 100), withdrawal_accepted(1, 2, 40)],
+                &[deposit_event(1, 1, 100), withdrawal_event(1, 2, 40)],
                 Command::Dispute { client: 1, tx: 2 },
             ),
             Decision::Ignore
@@ -279,7 +279,7 @@ mod test {
     fn test_dispute_is_ignored_for_transaction_owned_by_another_client() {
         assert_eq!(
             decide_with_previous_events(
-                &[deposit_accepted(1, 1, 100)],
+                &[deposit_event(1, 1, 100)],
                 Command::Dispute { client: 2, tx: 1 },
             ),
             Decision::Ignore
@@ -290,7 +290,7 @@ mod test {
     fn test_resolve_is_accepted_for_disputed_deposit() {
         assert_eq!(
             decide_with_previous_events(
-                &[deposit_accepted(1, 1, 100), deposit_disputed(1, 1, 100)],
+                &[deposit_event(1, 1, 100), deposit_disputed(1, 1, 100)],
                 Command::Resolve { client: 1, tx: 1 },
             ),
             Decision::Apply(dispute_resolved(1, 1, 100))
@@ -301,7 +301,7 @@ mod test {
     fn test_resolve_is_ignored_for_valid_deposit() {
         assert_eq!(
             decide_with_previous_events(
-                &[deposit_accepted(1, 1, 100)],
+                &[deposit_event(1, 1, 100)],
                 Command::Resolve { client: 1, tx: 1 },
             ),
             Decision::Ignore
@@ -312,7 +312,7 @@ mod test {
     fn test_chargeback_is_accepted_for_disputed_deposit() {
         assert_eq!(
             decide_with_previous_events(
-                &[deposit_accepted(1, 1, 100), deposit_disputed(1, 1, 100)],
+                &[deposit_event(1, 1, 100), deposit_disputed(1, 1, 100)],
                 Command::Chargeback { client: 1, tx: 1 },
             ),
             Decision::Apply(deposit_charged_back(1, 1, 100))
@@ -322,8 +322,8 @@ mod test {
     #[test]
     fn test_commands_for_locked_account_are_ignored() {
         let events = [
-            deposit_accepted(1, 1, 100),
-            deposit_accepted(1, 2, 50),
+            deposit_event(1, 1, 100),
+            deposit_event(1, 2, 50),
             deposit_disputed(1, 1, 100),
             deposit_charged_back(1, 1, 100),
         ];

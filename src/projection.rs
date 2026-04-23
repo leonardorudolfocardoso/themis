@@ -14,11 +14,11 @@ pub(crate) struct LedgerProjection {
 impl LedgerProjection {
     pub(crate) fn apply(&mut self, event: Event) {
         match event {
-            Event::DepositAccepted { client, tx, amount } => {
+            Event::Deposit { client, tx, amount } => {
                 let account = self.account_mut_or_create(client);
                 account
                     .deposit(amount)
-                    .expect("DepositAccepted must target an unlocked account");
+                    .expect("Event::Deposit must target an unlocked account");
 
                 self.insert_record(
                     tx,
@@ -30,14 +30,14 @@ impl LedgerProjection {
                     },
                 );
             }
-            Event::WithdrawalAccepted { client, tx, amount } => {
+            Event::Withdrawal { client, tx, amount } => {
                 let account = self
                     .account_mut(client)
-                    .expect("WithdrawalAccepted must target an existing account");
+                    .expect("Event::Withdrawal must target an existing account");
 
                 account
                     .withdraw(amount)
-                    .expect("WithdrawalAccepted must target an account with enough funds");
+                    .expect("Event::Withdrawal must target an account with enough funds");
 
                 self.insert_record(
                     tx,
@@ -138,16 +138,16 @@ mod test {
     use crate::event::Event;
     use crate::transaction::{Kind, State};
 
-    fn deposit_accepted(client: u16, tx: u32, amount: u64) -> Event {
-        Event::DepositAccepted {
+    fn deposit_event(client: u16, tx: u32, amount: u64) -> Event {
+        Event::Deposit {
             client,
             tx,
             amount: Amount::raw(amount),
         }
     }
 
-    fn withdrawal_accepted(client: u16, tx: u32, amount: u64) -> Event {
-        Event::WithdrawalAccepted {
+    fn withdrawal_event(client: u16, tx: u32, amount: u64) -> Event {
+        Event::Withdrawal {
             client,
             tx,
             amount: Amount::raw(amount),
@@ -187,8 +187,8 @@ mod test {
     }
 
     #[test]
-    fn test_deposit_accepted_creates_account_and_deposit_record() {
-        let projection = projection_with(&[deposit_accepted(1, 1, 100)]);
+    fn test_deposit_event_creates_account_and_deposit_record() {
+        let projection = projection_with(&[deposit_event(1, 1, 100)]);
 
         let account = projection.account(1).expect("account not found");
         assert_eq!(account.available(), 100);
@@ -203,9 +203,8 @@ mod test {
     }
 
     #[test]
-    fn test_withdrawal_accepted_decreases_available_and_creates_withdrawal_record() {
-        let projection =
-            projection_with(&[deposit_accepted(1, 1, 100), withdrawal_accepted(1, 2, 40)]);
+    fn test_withdrawal_event_decreases_available_and_creates_withdrawal_record() {
+        let projection = projection_with(&[deposit_event(1, 1, 100), withdrawal_event(1, 2, 40)]);
 
         let account = projection.account(1).expect("account not found");
         assert_eq!(account.available(), 60);
@@ -220,8 +219,7 @@ mod test {
 
     #[test]
     fn test_deposit_disputed_moves_available_to_held_and_marks_record_disputed() {
-        let projection =
-            projection_with(&[deposit_accepted(1, 1, 100), deposit_disputed(1, 1, 100)]);
+        let projection = projection_with(&[deposit_event(1, 1, 100), deposit_disputed(1, 1, 100)]);
 
         let account = projection.account(1).expect("account not found");
         assert_eq!(account.available(), 0);
@@ -235,7 +233,7 @@ mod test {
     #[test]
     fn test_dispute_resolved_moves_held_to_available_and_marks_record_resolved() {
         let projection = projection_with(&[
-            deposit_accepted(1, 1, 100),
+            deposit_event(1, 1, 100),
             deposit_disputed(1, 1, 100),
             dispute_resolved(1, 1, 100),
         ]);
@@ -252,7 +250,7 @@ mod test {
     #[test]
     fn test_deposit_charged_back_removes_held_locks_account_and_marks_record_chargedback() {
         let projection = projection_with(&[
-            deposit_accepted(1, 1, 100),
+            deposit_event(1, 1, 100),
             deposit_disputed(1, 1, 100),
             deposit_charged_back(1, 1, 100),
         ]);
@@ -270,8 +268,8 @@ mod test {
     #[test]
     fn test_chargeback_after_withdrawal_can_make_total_negative() {
         let projection = projection_with(&[
-            deposit_accepted(1, 1, 100),
-            withdrawal_accepted(1, 2, 80),
+            deposit_event(1, 1, 100),
+            withdrawal_event(1, 2, 80),
             deposit_disputed(1, 1, 100),
             deposit_charged_back(1, 1, 100),
         ]);

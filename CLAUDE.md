@@ -27,7 +27,7 @@ The ledger reads a CSV stream of transaction commands, decides which commands be
 - `balance.rs` — `Balance` value object holding `available: Funds` and `held: Amount`. All monetary mutation logic lives here. `total()` is derived as `available + held`.
 - `account.rs` — `Account` holds identity (`client: u16`), a `Balance`, and `locked: bool`. Locked check lives here; monetary operations delegate to `Balance`. Two distinct states: frozen funds (temporary, reversible) vs. locked account (permanent).
 - `command.rs` — `Command` enum for external transaction requests (Deposit, Withdrawal, Dispute, Resolve, Chargeback).
-- `event.rs` — `Event` enum for accepted ledger facts (DepositAccepted, WithdrawalAccepted, DepositDisputed, DisputeResolved, DepositChargedBack).
+- `event.rs` — `Event` enum for accepted ledger facts (Deposit, Withdrawal, DepositDisputed, DisputeResolved, DepositChargedBack).
 - `decider.rs` — `Decider` checks each `Command` against the current `LedgerProjection` and returns either an accepted `Event` or `Ignore`.
 - `event_log.rs` — In-memory append-only list of accepted ledger events.
 - `projection.rs` — `LedgerProjection` applies accepted events to account balances and transaction records.
