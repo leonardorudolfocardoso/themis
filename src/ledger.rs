@@ -8,7 +8,7 @@ use crate::transaction::{Kind, Record, State};
 
 /// Processes a stream of transaction commands and maintains account state.
 ///
-/// `Processor` applies each [`Command`] to the corresponding [`Account`],
+/// `Ledger` applies each [`Command`] to the corresponding [`Account`],
 /// enforcing all transaction rules:
 ///
 /// - Duplicate transaction IDs are silently ignored.
@@ -17,13 +17,13 @@ use crate::transaction::{Kind, Record, State};
 ///   belonging to the same client.
 /// - All operations on locked accounts are silently ignored.
 #[derive(Default)]
-pub struct Processor {
+pub struct Ledger {
     accounts: HashMap<ClientId, Account>,
     records: HashMap<TransactionId, Record>,
 }
 
-impl Processor {
-    /// Creates a new processor with no accounts or transaction history.
+impl Ledger {
+    /// Creates a new ledger with no accounts or transaction history.
     pub fn new() -> Self {
         Self::default()
     }
@@ -139,13 +139,13 @@ impl Processor {
 
 #[cfg(test)]
 mod test {
-    use super::Processor;
+    use super::Ledger;
     use crate::account::Account;
     use crate::amount::Amount;
     use crate::command::Command;
 
     fn process(transactions: Vec<Command>) -> HashMap<u16, Account> {
-        Processor::new().process(transactions.into_iter())
+        Ledger::new().process(transactions.into_iter())
     }
 
     use std::collections::HashMap;

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-`themis` is a financial transaction processor in Rust (edition 2024) that reads CSV transaction commands from a file path and writes account state to stdout.
+`themis` is a financial transaction ledger in Rust (edition 2024) that reads CSV transaction commands from a file path and writes account state to stdout.
 
 ## Commands
 
@@ -19,7 +19,7 @@ cargo fmt            # format
 
 ## Architecture
 
-The processor reads a CSV stream of transaction commands, applies them to accounts, and outputs account balances as CSV.
+The ledger reads a CSV stream of transaction commands, applies them to accounts, and outputs account balances as CSV.
 
 **Module structure:**
 - `amount.rs` — `Amount(u64)` newtype for transaction values (always non-negative). Scale: 10,000 units per 1.0 (e.g. `1.2345` → `12345`). Constructed by parsing decimal strings from CSV; use `Amount::raw(u64)` in tests only.
@@ -28,7 +28,7 @@ The processor reads a CSV stream of transaction commands, applies them to accoun
 - `account.rs` — `Account` holds identity (`client: u16`), a `Balance`, and `locked: bool`. Locked check lives here; monetary operations delegate to `Balance`. Two distinct states: frozen funds (temporary, reversible) vs. locked account (permanent).
 - `command.rs` — `Command` enum for all transaction input operations (Deposit, Withdrawal, Dispute, Resolve, Chargeback).
 - `transaction.rs` — `Record`, `Kind`, and `State` track and enforce the dispute lifecycle of processed transactions. Only `Kind::Deposit` is disputable.
-- `processor.rs` — `Processor` consumes an `Iterator<Item = Command>` and returns `HashMap<u16, Account>`.
+- `ledger.rs` — `Ledger` consumes an `Iterator<Item = Command>` and returns `HashMap<u16, Account>`.
 - `csv/reader.rs` — Deserializes CSV rows into `RawCommand` via serde, converts to `Command` via `TryFrom`. Invalid rows are silently skipped.
 - `csv/writer.rs` — Serializes `Account` iterator to CSV via serde using an `OutputRow` intermediate struct. Output is sorted by client ID.
 

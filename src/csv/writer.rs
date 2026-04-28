@@ -43,7 +43,7 @@ mod test {
     use super::*;
     use crate::amount::Amount;
     use crate::command::Command;
-    use crate::processor::Processor;
+    use crate::ledger::Ledger;
 
     fn account_with(
         client: u16,
@@ -62,7 +62,7 @@ mod test {
         if locked {
             commands.push(Command::Chargeback { client, tx: 1 });
         }
-        Processor::new()
+        Ledger::new()
             .process(commands.into_iter())
             .remove(&client)
             .unwrap()
