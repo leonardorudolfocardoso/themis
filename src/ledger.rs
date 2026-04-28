@@ -51,10 +51,7 @@ impl Ledger {
     fn decide(&self, command: &Command) -> Decision {
         match command {
             Command::Deposit { client, tx, amount } => {
-                if self.transactions.contains(tx) {
-                    return Decision::Denied;
-                }
-                if self.accounts.get(client).is_some_and(|a| a.locked()) {
+                if self.transactions.contains(tx) || self.accounts.is_locked(client) {
                     return Decision::Denied;
                 }
                 Decision::Approved(Event::Deposited {
@@ -64,14 +61,7 @@ impl Ledger {
                 })
             }
             Command::Withdrawal { client, tx, amount } => {
-                if self.transactions.contains(tx) {
-                    return Decision::Denied;
-                }
-                let account = self.accounts.get(client);
-                if account.is_some_and(|a| a.locked()) {
-                    return Decision::Denied;
-                }
-                if account.map(|a| a.available() < *amount).unwrap_or(true) {
+                if self.transactions.contains(tx) || !self.accounts.can_withdraw(client, *amount) {
                     return Decision::Denied;
                 }
                 Decision::Approved(Event::Withdrawn {
@@ -81,51 +71,42 @@ impl Ledger {
                 })
             }
             Command::Dispute { client, tx } => {
-                let Some(transaction) = self.transactions.get(tx) else {
+                let Some(amount) = self.transactions.dispute_amount(*client, tx) else {
                     return Decision::Denied;
                 };
-                if self.accounts.get(client).is_some_and(|a| a.locked()) {
-                    return Decision::Denied;
-                }
-                if transaction.client != *client || !transaction.is_disputable() {
+                if self.accounts.is_locked(client) {
                     return Decision::Denied;
                 }
                 Decision::Approved(Event::DisputeOpened {
                     client: *client,
                     tx: *tx,
-                    amount: transaction.amount,
+                    amount,
                 })
             }
             Command::Resolve { client, tx } => {
-                let Some(transaction) = self.transactions.get(tx) else {
+                let Some(amount) = self.transactions.resolve_amount(*client, tx) else {
                     return Decision::Denied;
                 };
-                if self.accounts.get(client).is_some_and(|a| a.locked()) {
-                    return Decision::Denied;
-                }
-                if transaction.client != *client || !transaction.state.is_resolvable() {
+                if self.accounts.is_locked(client) {
                     return Decision::Denied;
                 }
                 Decision::Approved(Event::DisputeResolved {
                     client: *client,
                     tx: *tx,
-                    amount: transaction.amount,
+                    amount,
                 })
             }
             Command::Chargeback { client, tx } => {
-                let Some(transaction) = self.transactions.get(tx) else {
+                let Some(amount) = self.transactions.chargeback_amount(*client, tx) else {
                     return Decision::Denied;
                 };
-                if self.accounts.get(client).is_some_and(|a| a.locked()) {
-                    return Decision::Denied;
-                }
-                if transaction.client != *client || !transaction.state.is_chargebackable() {
+                if self.accounts.is_locked(client) {
                     return Decision::Denied;
                 }
                 Decision::Approved(Event::ChargedBack {
                     client: *client,
                     tx: *tx,
-                    amount: transaction.amount,
+                    amount,
                 })
             }
         }

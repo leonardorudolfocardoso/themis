@@ -8,7 +8,7 @@ use crate::id::{ClientId, TransactionId};
 ///
 /// Transitions flow in one direction: `Valid` → `Disputed` → `Resolved` or `Chargedback`.
 /// A resolved or charged-back transaction cannot be disputed again.
-pub(crate) enum State {
+enum State {
     /// The transaction has not been disputed.
     Valid,
     /// A dispute is open on this transaction.
@@ -19,27 +19,10 @@ pub(crate) enum State {
     Chargedback,
 }
 
-impl State {
-    /// Returns `true` if the transaction can be disputed (i.e. it is `Valid`).
-    pub(crate) fn is_disputable(&self) -> bool {
-        matches!(self, State::Valid)
-    }
-
-    /// Returns `true` if the transaction can be resolved (i.e. it is `Disputed`).
-    pub(crate) fn is_resolvable(&self) -> bool {
-        matches!(self, State::Disputed)
-    }
-
-    /// Returns `true` if the transaction can be charged back (i.e. it is `Disputed`).
-    pub(crate) fn is_chargebackable(&self) -> bool {
-        matches!(self, State::Disputed)
-    }
-}
-
 /// The kind of transaction, used to determine eligibility for disputes.
 ///
 /// Only deposits can be disputed — withdrawal disputes are silently ignored.
-pub(crate) enum Kind {
+enum Kind {
     /// A credit to the client's account.
     Deposit,
     /// A debit from the client's account.
@@ -47,23 +30,38 @@ pub(crate) enum Kind {
 }
 
 /// A processed transaction, tracking its dispute lifecycle.
-pub(crate) struct Transaction {
+struct Transaction {
     /// The client this transaction belongs to.
-    pub(crate) client: ClientId,
+    client: ClientId,
     /// The transaction amount.
-    pub(crate) amount: Amount,
+    amount: Amount,
     /// Whether this was a deposit or withdrawal.
-    pub(crate) kind: Kind,
+    kind: Kind,
     /// Current dispute state of the transaction.
-    pub(crate) state: State,
+    state: State,
 }
 
 impl Transaction {
     /// Returns `true` if the transaction can be disputed.
     ///
     /// Only `Valid` deposits are disputable; withdrawals are never disputable.
-    pub(crate) fn is_disputable(&self) -> bool {
-        matches!(self.kind, Kind::Deposit) && self.state.is_disputable()
+    fn is_disputable(&self) -> bool {
+        matches!(self.kind, Kind::Deposit) && matches!(self.state, State::Valid)
+    }
+
+    /// Returns the amount if the transaction belongs to `client` and is disputable.
+    fn dispute_amount(&self, client: ClientId) -> Option<Amount> {
+        (self.client == client && self.is_disputable()).then_some(self.amount)
+    }
+
+    /// Returns the amount if the transaction belongs to `client` and is resolvable.
+    fn resolve_amount(&self, client: ClientId) -> Option<Amount> {
+        (self.client == client && matches!(self.state, State::Disputed)).then_some(self.amount)
+    }
+
+    /// Returns the amount if the transaction belongs to `client` and is chargebackable.
+    fn chargeback_amount(&self, client: ClientId) -> Option<Amount> {
+        (self.client == client && matches!(self.state, State::Disputed)).then_some(self.amount)
     }
 }
 
@@ -80,9 +78,29 @@ impl Transactions {
         self.0.contains_key(tx)
     }
 
-    /// Returns a reference to the transaction with the given ID, if it exists.
-    pub(crate) fn get(&self, tx: &TransactionId) -> Option<&Transaction> {
-        self.0.get(tx)
+    /// Returns the disputed amount if the transaction is eligible for a dispute.
+    ///
+    /// Checks that the transaction exists, belongs to `client`, and is in a disputable state.
+    pub(crate) fn dispute_amount(&self, client: ClientId, tx: &TransactionId) -> Option<Amount> {
+        self.0.get(tx)?.dispute_amount(client)
+    }
+
+    /// Returns the held amount if the transaction is eligible for resolution.
+    ///
+    /// Checks that the transaction exists, belongs to `client`, and is currently disputed.
+    pub(crate) fn resolve_amount(&self, client: ClientId, tx: &TransactionId) -> Option<Amount> {
+        self.0.get(tx)?.resolve_amount(client)
+    }
+
+    /// Returns the held amount if the transaction is eligible for chargeback.
+    ///
+    /// Checks that the transaction exists, belongs to `client`, and is currently disputed.
+    pub(crate) fn chargeback_amount(
+        &self,
+        client: ClientId,
+        tx: &TransactionId,
+    ) -> Option<Amount> {
+        self.0.get(tx)?.chargeback_amount(client)
     }
 
     /// Applies a validated event, updating transaction records.

@@ -138,9 +138,18 @@ impl Account {
 pub(crate) struct Accounts(HashMap<ClientId, Account>);
 
 impl Accounts {
-    /// Returns a reference to the account for the given client, if it exists.
-    pub(crate) fn get(&self, client: &ClientId) -> Option<&Account> {
-        self.0.get(client)
+    /// Returns `true` if the account exists and is locked. Returns `false` for unknown clients.
+    pub(crate) fn is_locked(&self, client: &ClientId) -> bool {
+        self.0.get(client).is_some_and(|a| a.locked)
+    }
+
+    /// Returns `true` if the client can withdraw `amount`.
+    ///
+    /// Requires the account to exist, not be locked, and have sufficient available funds.
+    pub(crate) fn can_withdraw(&self, client: &ClientId, amount: Amount) -> bool {
+        self.0
+            .get(client)
+            .is_some_and(|a| !a.locked && a.available() >= amount)
     }
 
     /// Applies a validated event, updating account state.
