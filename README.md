@@ -60,7 +60,7 @@ A CSV with one row per client:
 - Monetary values are parsed directly from decimal strings and stored as scaled integers with 4 decimal places. Account logic uses integer arithmetic only.
 - `Amount` represents non-negative transaction values, while account balances use a signed `Funds` type so chargebacks can drive totals below zero.
 - Account locking is enforced separately from balance math. This keeps the balance model simple and makes the "locked accounts ignore future operations" rule easy to reason about.
-- Transaction records track both the original kind (`deposit` or `withdrawal`) and dispute lifecycle state, which makes invalid follow-up operations cheap to reject.
+- Transaction records track both the original kind (`deposit` or `withdrawal`) and dispute lifecycle transitions, which makes invalid follow-up operations cheap to reject.
 
 ## Assumptions
 

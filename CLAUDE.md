@@ -27,7 +27,7 @@ The processor reads a CSV stream of transaction commands, applies them to accoun
 - `balance.rs` — `Balance` value object holding `available: Funds` and `held: Amount`. All monetary mutation logic lives here. `total()` is derived as `available + held`.
 - `account.rs` — `Account` holds identity (`client: u16`), a `Balance`, and `locked: bool`. Locked check lives here; monetary operations delegate to `Balance`. Two distinct states: frozen funds (temporary, reversible) vs. locked account (permanent).
 - `command.rs` — `Command` enum for all transaction input operations (Deposit, Withdrawal, Dispute, Resolve, Chargeback).
-- `transaction.rs` — `Record`, `Kind`, and `State` track the dispute lifecycle of processed transactions. Only `Kind::Deposit` is disputable.
+- `transaction.rs` — `Record`, `Kind`, and `State` track and enforce the dispute lifecycle of processed transactions. Only `Kind::Deposit` is disputable.
 - `processor.rs` — `Processor` consumes an `Iterator<Item = Command>` and returns `HashMap<u16, Account>`.
 - `csv/reader.rs` — Deserializes CSV rows into `RawCommand` via serde, converts to `Command` via `TryFrom`. Invalid rows are silently skipped.
 - `csv/writer.rs` — Serializes `Account` iterator to CSV via serde using an `OutputRow` intermediate struct. Output is sorted by client ID.
@@ -36,7 +36,7 @@ The processor reads a CSV stream of transaction commands, applies them to accoun
 - Amounts use integer arithmetic scaled by 10,000 — no floating point in parsing or domain logic.
 - `Amount` (u64) vs `Funds` (i128): transaction values are always positive; account balances can go negative.
 - `Balance` is a pure value object with no domain knowledge — `Account` owns the locked state and guards deposit/withdraw.
-- `transaction::Record` is separate from `Command`: commands are input, records track internal dispute state.
+- `transaction::Record` is separate from `Command`: commands are input, records track internal dispute state and lifecycle transitions.
 - Disputes only apply to deposits, not withdrawals (`transaction::Kind` enforces this).
 - Duplicate transaction IDs are silently ignored.
 - Operations on locked accounts are silently ignored.

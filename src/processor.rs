@@ -89,36 +89,51 @@ impl Processor {
     }
 
     fn dispute(&mut self, client: u16, tx: u32) {
-        if let Some(record) = self.records.get_mut(&tx)
-            && record.client == client
-            && record.is_disputable()
-            && let Some(account) = self.accounts.get_mut(&client)
-            && account.hold(record.amount).is_ok()
-        {
-            record.state = State::Disputed;
+        let Some(record) = self.records.get_mut(&tx) else {
+            return;
+        };
+        let Some(account) = self.accounts.get_mut(&client) else {
+            return;
+        };
+        if account.locked() {
+            return;
         }
+        let Some(amount) = record.open_dispute(client) else {
+            return;
+        };
+        let _ = account.hold(amount);
     }
 
     fn resolve(&mut self, client: u16, tx: u32) {
-        if let Some(record) = self.records.get_mut(&tx)
-            && record.client == client
-            && record.state.is_resolvable()
-            && let Some(account) = self.accounts.get_mut(&client)
-            && account.release(record.amount).is_ok()
-        {
-            record.state = State::Resolved;
+        let Some(record) = self.records.get_mut(&tx) else {
+            return;
+        };
+        let Some(account) = self.accounts.get_mut(&client) else {
+            return;
+        };
+        if account.locked() {
+            return;
         }
+        let Some(amount) = record.resolve_dispute(client) else {
+            return;
+        };
+        let _ = account.release(amount);
     }
 
     fn chargeback(&mut self, client: u16, tx: u32) {
-        if let Some(record) = self.records.get_mut(&tx)
-            && record.client == client
-            && record.state.is_chargebackable()
-            && let Some(account) = self.accounts.get_mut(&client)
-            && account.chargeback(record.amount).is_ok()
-        {
-            record.state = State::Chargedback;
+        let Some(record) = self.records.get_mut(&tx) else {
+            return;
+        };
+        let Some(account) = self.accounts.get_mut(&client) else {
+            return;
+        };
+        if account.locked() {
+            return;
         }
+        let Some(amount) = record.chargeback(client) else {
+            return;
+        };
+        let _ = account.chargeback(amount);
     }
 }
 

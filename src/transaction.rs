@@ -62,4 +62,31 @@ impl Record {
     pub(crate) fn is_disputable(&self) -> bool {
         matches!(self.kind, Kind::Deposit) && self.state.is_disputable()
     }
+
+    /// Opens a dispute and returns the amount that must be held.
+    pub(crate) fn open_dispute(&mut self, client: ClientId) -> Option<Amount> {
+        if self.client != client || !self.is_disputable() {
+            return None;
+        }
+        self.state = State::Disputed;
+        Some(self.amount)
+    }
+
+    /// Resolves an open dispute and returns the amount that must be released.
+    pub(crate) fn resolve_dispute(&mut self, client: ClientId) -> Option<Amount> {
+        if self.client != client || !self.state.is_resolvable() {
+            return None;
+        }
+        self.state = State::Resolved;
+        Some(self.amount)
+    }
+
+    /// Finalises an open dispute and returns the amount to charge back.
+    pub(crate) fn chargeback(&mut self, client: ClientId) -> Option<Amount> {
+        if self.client != client || !self.state.is_chargebackable() {
+            return None;
+        }
+        self.state = State::Chargedback;
+        Some(self.amount)
+    }
 }
