@@ -60,7 +60,8 @@ A CSV with one row per client:
 - Monetary values are parsed directly from decimal strings and stored as scaled integers with 4 decimal places. Account logic uses integer arithmetic only.
 - `Amount` represents non-negative transaction values, while account balances use a signed `Funds` type so chargebacks can drive totals below zero.
 - Account locking is enforced separately from balance math. This keeps the balance model simple and makes the "locked accounts ignore future operations" rule easy to reason about.
-- Transaction records track both the original kind (`deposit` or `withdrawal`) and dispute lifecycle transitions, which makes invalid follow-up operations cheap to reject.
+- Event sourcing: commands are validated (`decide`) and produce events that are appended to a `Log`. The `Transactions` and `Accounts` aggregates are projections rebuilt by applying events. `Ledger::replay` proves the log is the sole source of truth.
+- Each aggregate encapsulates its own validation rules. The ledger composes their answers without reaching into their internals.
 
 ## Assumptions
 
@@ -77,38 +78,32 @@ sequenceDiagram
     participant CSV as CSV Input
     participant Reader as csv::Reader
     participant Ledger
-    participant Records as Transaction Records
-    participant Account
+    participant Txns as Transactions
+    participant Accts as Accounts
+    participant Log
     participant Writer as csv::Writer
     participant Out as CSV Output
 
     CSV->>Reader: raw row
-    Reader->>Ledger: Command (Deposit / Withdrawal) or skip invalid row
-    Ledger->>Records: check duplicate tx
-    Ledger->>Account: deposit() / withdraw()
-    Ledger->>Records: store record on success
+    Reader->>Ledger: Command (or skip invalid row)
 
-    CSV->>Reader: raw row
-    Reader->>Ledger: Command (Dispute)
-    Ledger->>Records: lookup valid deposit for same client
-    Ledger->>Account: hold()
-    Ledger->>Records: mark Disputed on success
+    Note over Ledger: decide (immutable)
+    Ledger->>Txns: validate (duplicate? disputable? client match?)
+    Ledger->>Accts: validate (locked? sufficient funds?)
+    Note over Ledger: Decision::Approved(Event)
 
-    CSV->>Reader: raw row
-    Reader->>Ledger: Command (Resolve)
-    Ledger->>Records: lookup disputed record for same client
-    Ledger->>Account: release()
-    Ledger->>Records: mark Resolved on success
+    Note over Ledger: record
+    Ledger->>Log: push(event)
+    Ledger->>Txns: apply(event)
+    Ledger->>Accts: apply(event)
 
-    CSV->>Reader: raw row
-    Reader->>Ledger: Command (Chargeback)
-    Ledger->>Records: lookup disputed record for same client
-    Ledger->>Account: chargeback() and lock account
-    Ledger->>Records: mark Chargedback on success
-
-    Ledger->>Writer: accounts
+    Note over Ledger: output
+    Ledger->>Writer: Accounts
     Writer->>Writer: sort by client ID
     Writer->>Out: client, available, held, total, locked
+
+    Note over Log: replay rebuilds state
+    Log->>Ledger: Ledger::replay(log)
 ```
 
 ## Development
