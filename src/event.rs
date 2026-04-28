@@ -61,3 +61,23 @@ pub(crate) enum Decision {
     /// The command was rejected (duplicate, locked, insufficient funds, etc.).
     Denied,
 }
+
+/// Append-only event log — the source of truth for all state changes.
+#[derive(Default)]
+pub struct Log(Vec<Event>);
+
+impl Log {
+    /// Appends an event to the log.
+    pub(crate) fn push(&mut self, event: Event) {
+        self.0.push(event);
+    }
+}
+
+impl IntoIterator for Log {
+    type Item = Event;
+    type IntoIter = std::vec::IntoIter<Event>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}

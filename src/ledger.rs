@@ -1,6 +1,6 @@
 use crate::account::Accounts;
 use crate::command::Command;
-use crate::event::{Decision, Event};
+use crate::event::{Decision, Event, Log};
 use crate::transaction::Transactions;
 
 /// Processes a stream of transaction commands and maintains account state.
@@ -15,7 +15,7 @@ use crate::transaction::Transactions;
 /// - All operations on locked accounts are silently ignored.
 #[derive(Default)]
 pub struct Ledger {
-    log: Vec<Event>,
+    log: Log,
     transactions: Transactions,
     accounts: Accounts,
 }
@@ -52,7 +52,7 @@ impl Ledger {
     }
 
     /// Consumes the ledger and returns the event log.
-    pub fn into_log(self) -> Vec<Event> {
+    pub fn into_log(self) -> Log {
         self.log
     }
 

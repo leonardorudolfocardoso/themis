@@ -17,4 +17,5 @@ pub use command::Command;
 pub use csv::from_reader;
 pub use csv::to_writer;
 pub use event::Event;
+pub use event::Log;
 pub use ledger::Ledger;
