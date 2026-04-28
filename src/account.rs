@@ -135,9 +135,14 @@ impl Account {
 /// Owns balance state and locked status. Used by the ledger to validate
 /// commands against account state and to produce the final output.
 #[derive(Default)]
-pub(crate) struct Accounts(HashMap<ClientId, Account>);
+pub struct Accounts(HashMap<ClientId, Account>);
 
 impl Accounts {
+    /// Returns a reference to the account for the given client, if it exists.
+    pub fn get(&self, client: &ClientId) -> Option<&Account> {
+        self.0.get(client)
+    }
+
     /// Returns `true` if the account exists and is locked. Returns `false` for unknown clients.
     pub(crate) fn is_locked(&self, client: &ClientId) -> bool {
         self.0.get(client).is_some_and(|a| a.locked)
@@ -197,10 +202,14 @@ impl Accounts {
             }
         }
     }
+}
 
-    /// Consumes the aggregate and returns the inner accounts map.
-    pub(crate) fn into_accounts(self) -> HashMap<ClientId, Account> {
-        self.0
+impl IntoIterator for Accounts {
+    type Item = Account;
+    type IntoIter = std::collections::hash_map::IntoValues<ClientId, Account>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_values()
     }
 }
 

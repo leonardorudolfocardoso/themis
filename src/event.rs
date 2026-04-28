@@ -6,7 +6,7 @@ use crate::id::{ClientId, TransactionId};
 /// Events are the output of the decision phase — each variant
 /// carries all data needed to apply the mutation without further lookups.
 #[derive(Clone, Copy)]
-pub(crate) enum Event {
+pub enum Event {
     /// Funds were credited to the client's account.
     Deposited {
         /// The account owner.

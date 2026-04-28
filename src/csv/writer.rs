@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::account::Account;
+use crate::account::{Account, Accounts};
 
 /// Serialization-ready snapshot of an account for CSV output.
 ///
@@ -28,8 +28,8 @@ impl From<&Account> for OutputRow {
 }
 
 /// Writes account state to `writer` as CSV, sorted by client ID.
-pub fn to_writer(writer: impl std::io::Write, accounts: impl Iterator<Item = Account>) {
-    let mut accounts: Vec<Account> = accounts.collect();
+pub fn to_writer(writer: impl std::io::Write, accounts: Accounts) {
+    let mut accounts: Vec<Account> = accounts.into_iter().collect();
     accounts.sort_by_key(|a| a.client());
     let mut wtr = csv::Writer::from_writer(writer);
     for account in &accounts {
@@ -45,34 +45,21 @@ mod test {
     use crate::command::Command;
     use crate::ledger::Ledger;
 
-    fn account_with(
-        client: u16,
-        available: i64,
-        held: u64,
-        locked: bool,
-    ) -> crate::account::Account {
-        let mut commands: Vec<Command> = vec![Command::Deposit {
-            client,
-            tx: 1,
-            amount: Amount::raw((available + held as i64) as u64),
-        }];
-        if held > 0 {
-            commands.push(Command::Dispute { client, tx: 1 });
-        }
-        if locked {
-            commands.push(Command::Chargeback { client, tx: 1 });
-        }
-        Ledger::new()
-            .process(commands.into_iter())
-            .remove(&client)
-            .unwrap()
+    fn accounts_from(commands: Vec<Command>) -> Accounts {
+        let mut ledger = Ledger::new();
+        ledger.ingest(commands.into_iter());
+        ledger.into_accounts()
     }
 
     #[test]
     fn test_writes_header_and_row() {
-        let account = account_with(1, 10000, 0, false);
+        let accounts = accounts_from(vec![Command::Deposit {
+            client: 1,
+            tx: 1,
+            amount: Amount::raw(10000),
+        }]);
         let mut buf = Vec::new();
-        to_writer(&mut buf, vec![account].into_iter());
+        to_writer(&mut buf, accounts);
         let output = String::from_utf8(buf).unwrap();
         assert_eq!(
             output,
@@ -82,10 +69,20 @@ mod test {
 
     #[test]
     fn test_accounts_sorted_by_client() {
-        let a1 = account_with(2, 10000, 0, false);
-        let a2 = account_with(1, 20000, 0, false);
+        let accounts = accounts_from(vec![
+            Command::Deposit {
+                client: 2,
+                tx: 1,
+                amount: Amount::raw(10000),
+            },
+            Command::Deposit {
+                client: 1,
+                tx: 2,
+                amount: Amount::raw(20000),
+            },
+        ]);
         let mut buf = Vec::new();
-        to_writer(&mut buf, vec![a1, a2].into_iter());
+        to_writer(&mut buf, accounts);
         let output = String::from_utf8(buf).unwrap();
         let lines: Vec<&str> = output.lines().collect();
         assert!(lines[1].starts_with("1,"));

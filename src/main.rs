@@ -2,8 +2,9 @@ use std::{env, error::Error, fs::File, io};
 use themis::{Ledger, from_reader, to_writer};
 
 fn run(input: impl io::Read, output: impl io::Write) {
-    let accounts = Ledger::new().process(from_reader(input));
-    to_writer(output, accounts.into_values());
+    let mut ledger = Ledger::new();
+    ledger.ingest(from_reader(input));
+    to_writer(output, ledger.into_accounts());
 }
 
 fn main() -> Result<(), Box<dyn Error>> {

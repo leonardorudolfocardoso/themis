@@ -1,9 +1,6 @@
-use std::collections::HashMap;
-
-use crate::account::{Account, Accounts};
+use crate::account::Accounts;
 use crate::command::Command;
 use crate::event::{Decision, Event};
-use crate::id::ClientId;
 use crate::transaction::Transactions;
 
 /// Processes a stream of transaction commands and maintains account state.
@@ -29,20 +26,34 @@ impl Ledger {
         Self::default()
     }
 
-    /// Consumes all commands from `transactions` and returns the final account state.
+    /// Rebuilds a ledger by replaying a sequence of previously validated events.
     ///
-    /// Each client account is created on first deposit or withdrawal.
-    pub fn process(
-        mut self,
-        transactions: impl Iterator<Item = Command>,
-    ) -> HashMap<ClientId, Account> {
-        for command in transactions {
+    /// No validation is performed — events are recorded unconditionally.
+    pub fn replay(events: impl Iterator<Item = Event>) -> Self {
+        let mut ledger = Self::new();
+        for event in events {
+            ledger.record(event);
+        }
+        ledger
+    }
+
+    /// Ingests a stream of commands, validating each and recording approved events.
+    pub fn ingest(&mut self, commands: impl Iterator<Item = Command>) {
+        for command in commands {
             if let Decision::Approved(event) = self.decide(&command) {
-                self.log.push(event);
-                self.apply(event);
+                self.record(event);
             }
         }
-        self.accounts.into_accounts()
+    }
+
+    /// Consumes the ledger and returns the final account state.
+    pub fn into_accounts(self) -> Accounts {
+        self.accounts
+    }
+
+    /// Consumes the ledger and returns the event log.
+    pub fn into_log(self) -> Vec<Event> {
+        self.log
     }
 
     /// Validates a command against current state and returns a decision.
@@ -112,8 +123,9 @@ impl Ledger {
         }
     }
 
-    /// Applies a validated event to both aggregates.
-    fn apply(&mut self, event: Event) {
+    /// Records an event: appends to the log and updates both aggregates.
+    fn record(&mut self, event: Event) {
+        self.log.push(event);
         self.transactions.apply(event);
         self.accounts.apply(event);
     }
@@ -122,19 +134,19 @@ impl Ledger {
 #[cfg(test)]
 mod test {
     use super::Ledger;
-    use crate::account::Account;
+    use crate::account::Accounts;
     use crate::amount::Amount;
     use crate::command::Command;
 
-    fn process(transactions: Vec<Command>) -> HashMap<u16, Account> {
-        Ledger::new().process(transactions.into_iter())
+    fn ingest(commands: Vec<Command>) -> Accounts {
+        let mut ledger = Ledger::new();
+        ledger.ingest(commands.into_iter());
+        ledger.into_accounts()
     }
-
-    use std::collections::HashMap;
 
     #[test]
     fn test_duplicate_tx_id_is_ignored() {
-        let accounts = process(vec![
+        let accounts = ingest(vec![
             Command::Deposit {
                 client: 1,
                 tx: 1,
@@ -153,7 +165,7 @@ mod test {
 
     #[test]
     fn test_duplicate_withdrawal_tx_id_is_ignored() {
-        let accounts = process(vec![
+        let accounts = ingest(vec![
             Command::Deposit {
                 client: 1,
                 tx: 1,
@@ -177,7 +189,7 @@ mod test {
 
     #[test]
     fn test_deposit_on_locked_account_is_ignored() {
-        let accounts = process(vec![
+        let accounts = ingest(vec![
             Command::Deposit {
                 client: 1,
                 tx: 1,
@@ -199,7 +211,7 @@ mod test {
 
     #[test]
     fn test_withdraw_locked_is_silently_ignored() {
-        let accounts = process(vec![
+        let accounts = ingest(vec![
             Command::Deposit {
                 client: 1,
                 tx: 1,
@@ -220,7 +232,7 @@ mod test {
 
     #[test]
     fn test_dispute_on_withdrawal_is_ignored() {
-        let accounts = process(vec![
+        let accounts = ingest(vec![
             Command::Deposit {
                 client: 1,
                 tx: 1,
@@ -240,7 +252,7 @@ mod test {
 
     #[test]
     fn test_dispute_decreases_available_and_increases_held() {
-        let accounts = process(vec![
+        let accounts = ingest(vec![
             Command::Deposit {
                 client: 1,
                 tx: 1,
@@ -256,7 +268,7 @@ mod test {
 
     #[test]
     fn test_dispute_on_wrong_client_is_ignored() {
-        let accounts = process(vec![
+        let accounts = ingest(vec![
             Command::Deposit {
                 client: 1,
                 tx: 1,
@@ -271,7 +283,7 @@ mod test {
 
     #[test]
     fn test_dispute_on_invalid_state_is_ignored() {
-        let accounts = process(vec![
+        let accounts = ingest(vec![
             Command::Deposit {
                 client: 1,
                 tx: 1,
@@ -287,7 +299,7 @@ mod test {
 
     #[test]
     fn test_dispute_on_locked_account_is_ignored() {
-        let accounts = process(vec![
+        let accounts = ingest(vec![
             Command::Deposit {
                 client: 1,
                 tx: 1,
@@ -311,7 +323,7 @@ mod test {
 
     #[test]
     fn test_resolve_decreases_held_and_increases_available() {
-        let accounts = process(vec![
+        let accounts = ingest(vec![
             Command::Deposit {
                 client: 1,
                 tx: 1,
@@ -328,7 +340,7 @@ mod test {
 
     #[test]
     fn test_resolve_without_dispute_is_ignored() {
-        let accounts = process(vec![
+        let accounts = ingest(vec![
             Command::Deposit {
                 client: 1,
                 tx: 1,
@@ -343,7 +355,7 @@ mod test {
 
     #[test]
     fn test_resolve_on_wrong_client_is_ignored() {
-        let accounts = process(vec![
+        let accounts = ingest(vec![
             Command::Deposit {
                 client: 1,
                 tx: 1,
@@ -359,7 +371,7 @@ mod test {
 
     #[test]
     fn test_resolve_on_already_resolved_is_ignored() {
-        let accounts = process(vec![
+        let accounts = ingest(vec![
             Command::Deposit {
                 client: 1,
                 tx: 1,
@@ -376,7 +388,7 @@ mod test {
 
     #[test]
     fn test_chargeback_locks_account_and_decreases_held_and_total() {
-        let accounts = process(vec![
+        let accounts = ingest(vec![
             Command::Deposit {
                 client: 1,
                 tx: 1,
@@ -394,7 +406,7 @@ mod test {
 
     #[test]
     fn test_chargeback_without_dispute_is_ignored() {
-        let accounts = process(vec![
+        let accounts = ingest(vec![
             Command::Deposit {
                 client: 1,
                 tx: 1,
@@ -408,7 +420,7 @@ mod test {
 
     #[test]
     fn test_chargeback_on_wrong_client_is_ignored() {
-        let accounts = process(vec![
+        let accounts = ingest(vec![
             Command::Deposit {
                 client: 1,
                 tx: 1,
@@ -424,7 +436,7 @@ mod test {
 
     #[test]
     fn test_chargeback_on_already_chargedback_is_ignored() {
-        let accounts = process(vec![
+        let accounts = ingest(vec![
             Command::Deposit {
                 client: 1,
                 tx: 1,
@@ -443,7 +455,7 @@ mod test {
     #[test]
     fn test_resolve_after_withdrawal_is_correct() {
         // Deposit 100, withdraw 80 (total=20), dispute the deposit, resolve.
-        let accounts = process(vec![
+        let accounts = ingest(vec![
             Command::Deposit {
                 client: 1,
                 tx: 1,
@@ -467,7 +479,7 @@ mod test {
     fn test_chargeback_of_deposit_after_withdrawal_total_is_negative() {
         // Deposit 100, withdraw 80 (total=20), dispute the deposit, chargeback.
         // total = 20 - 100 = -80: the account owes the bank the withdrawn funds.
-        let accounts = process(vec![
+        let accounts = ingest(vec![
             Command::Deposit {
                 client: 1,
                 tx: 1,
@@ -486,5 +498,45 @@ mod test {
         assert_eq!(account.held(), Amount::default());
         assert_eq!(account.total(), -80);
         assert!(account.locked());
+    }
+
+    #[test]
+    fn test_replay_produces_same_state_as_process() {
+        let commands = vec![
+            Command::Deposit {
+                client: 1,
+                tx: 1,
+                amount: Amount::raw(100),
+            },
+            Command::Withdrawal {
+                client: 1,
+                tx: 2,
+                amount: Amount::raw(30),
+            },
+            Command::Deposit {
+                client: 2,
+                tx: 3,
+                amount: Amount::raw(200),
+            },
+            Command::Dispute { client: 1, tx: 1 },
+            Command::Resolve { client: 1, tx: 1 },
+        ];
+
+        // Process commands and capture the log.
+        let mut ledger = Ledger::new();
+        ledger.ingest(commands.into_iter());
+        let log = ledger.into_log();
+
+        // Replay the log into a fresh ledger.
+        let replayed = Ledger::replay(log.into_iter()).into_accounts();
+
+        let a1 = replayed.get(&1).unwrap();
+        assert_eq!(a1.available(), 70);
+        assert_eq!(a1.held(), Amount::default());
+        assert_eq!(a1.total(), 70);
+
+        let a2 = replayed.get(&2).unwrap();
+        assert_eq!(a2.available(), 200);
+        assert_eq!(a2.total(), 200);
     }
 }
