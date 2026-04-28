@@ -4,6 +4,7 @@ mod amount;
 mod balance;
 mod command;
 mod csv;
+mod event;
 mod funds;
 mod id;
 mod ledger;
