@@ -1,7 +1,10 @@
-use crate::amount::Amount;
-use crate::id::ClientId;
+use std::collections::HashMap;
 
-/// Lifecycle state of a transaction record.
+use crate::amount::Amount;
+use crate::event::Event;
+use crate::id::{ClientId, TransactionId};
+
+/// Lifecycle state of a transaction.
 ///
 /// Transitions flow in one direction: `Valid` → `Disputed` → `Resolved` or `Chargedback`.
 /// A resolved or charged-back transaction cannot be disputed again.
@@ -43,8 +46,8 @@ pub(crate) enum Kind {
     Withdrawal,
 }
 
-/// Internal record of a processed transaction, tracking its dispute lifecycle.
-pub(crate) struct Record {
+/// A processed transaction, tracking its dispute lifecycle.
+pub(crate) struct Transaction {
     /// The client this transaction belongs to.
     pub(crate) client: ClientId,
     /// The transaction amount.
@@ -55,38 +58,87 @@ pub(crate) struct Record {
     pub(crate) state: State,
 }
 
-impl Record {
+impl Transaction {
     /// Returns `true` if the transaction can be disputed.
     ///
     /// Only `Valid` deposits are disputable; withdrawals are never disputable.
     pub(crate) fn is_disputable(&self) -> bool {
         matches!(self.kind, Kind::Deposit) && self.state.is_disputable()
     }
+}
 
-    /// Opens a dispute and returns the amount that must be held.
-    pub(crate) fn open_dispute(&mut self, client: ClientId) -> Option<Amount> {
-        if self.client != client || !self.is_disputable() {
-            return None;
-        }
-        self.state = State::Disputed;
-        Some(self.amount)
+/// All processed transactions, indexed by ID — the transaction aggregate.
+///
+/// Owns the dispute lifecycle and transaction identity. Used by the ledger
+/// to validate commands against existing transaction state.
+#[derive(Default)]
+pub(crate) struct Transactions(HashMap<TransactionId, Transaction>);
+
+impl Transactions {
+    /// Returns `true` if a transaction with the given ID has already been processed.
+    pub(crate) fn contains(&self, tx: &TransactionId) -> bool {
+        self.0.contains_key(tx)
     }
 
-    /// Resolves an open dispute and returns the amount that must be released.
-    pub(crate) fn resolve_dispute(&mut self, client: ClientId) -> Option<Amount> {
-        if self.client != client || !self.state.is_resolvable() {
-            return None;
-        }
-        self.state = State::Resolved;
-        Some(self.amount)
+    /// Returns a reference to the transaction with the given ID, if it exists.
+    pub(crate) fn get(&self, tx: &TransactionId) -> Option<&Transaction> {
+        self.0.get(tx)
     }
 
-    /// Finalises an open dispute and returns the amount to charge back.
-    pub(crate) fn chargeback(&mut self, client: ClientId) -> Option<Amount> {
-        if self.client != client || !self.state.is_chargebackable() {
-            return None;
+    /// Applies a validated event, updating transaction records.
+    pub(crate) fn apply(&mut self, event: Event) {
+        match event {
+            Event::Deposited {
+                client,
+                tx,
+                amount,
+            } => {
+                self.0.insert(
+                    tx,
+                    Transaction {
+                        client,
+                        amount,
+                        kind: Kind::Deposit,
+                        state: State::Valid,
+                    },
+                );
+            }
+            Event::Withdrawn {
+                client,
+                tx,
+                amount,
+            } => {
+                self.0.insert(
+                    tx,
+                    Transaction {
+                        client,
+                        amount,
+                        kind: Kind::Withdrawal,
+                        state: State::Valid,
+                    },
+                );
+            }
+            Event::DisputeOpened {
+                client: _,
+                tx,
+                amount: _,
+            } => {
+                self.0.get_mut(&tx).expect("transaction must exist").state = State::Disputed;
+            }
+            Event::DisputeResolved {
+                client: _,
+                tx,
+                amount: _,
+            } => {
+                self.0.get_mut(&tx).expect("transaction must exist").state = State::Resolved;
+            }
+            Event::ChargedBack {
+                client: _,
+                tx,
+                amount: _,
+            } => {
+                self.0.get_mut(&tx).expect("transaction must exist").state = State::Chargedback;
+            }
         }
-        self.state = State::Chargedback;
-        Some(self.amount)
     }
 }

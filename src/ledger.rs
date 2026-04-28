@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
-use crate::account::Account;
+use crate::account::{Account, Accounts};
 use crate::command::Command;
 use crate::event::{Decision, Event};
-use crate::id::{ClientId, TransactionId};
-use crate::transaction::{Kind, Record, State};
+use crate::id::ClientId;
+use crate::transaction::Transactions;
 
 /// Processes a stream of transaction commands and maintains account state.
 ///
@@ -19,8 +19,8 @@ use crate::transaction::{Kind, Record, State};
 #[derive(Default)]
 pub struct Ledger {
     log: Vec<Event>,
-    accounts: HashMap<ClientId, Account>,
-    records: HashMap<TransactionId, Record>,
+    transactions: Transactions,
+    accounts: Accounts,
 }
 
 impl Ledger {
@@ -32,14 +32,17 @@ impl Ledger {
     /// Consumes all commands from `transactions` and returns the final account state.
     ///
     /// Each client account is created on first deposit or withdrawal.
-    pub fn process(mut self, transactions: impl Iterator<Item = Command>) -> HashMap<u16, Account> {
+    pub fn process(
+        mut self,
+        transactions: impl Iterator<Item = Command>,
+    ) -> HashMap<ClientId, Account> {
         for command in transactions {
             if let Decision::Approved(event) = self.decide(&command) {
                 self.log.push(event);
                 self.apply(event);
             }
         }
-        self.accounts
+        self.accounts.into_accounts()
     }
 
     /// Validates a command against current state and returns a decision.
@@ -48,14 +51,10 @@ impl Ledger {
     fn decide(&self, command: &Command) -> Decision {
         match command {
             Command::Deposit { client, tx, amount } => {
-                if self.records.contains_key(tx) {
+                if self.transactions.contains(tx) {
                     return Decision::Denied;
                 }
-                if self
-                    .accounts
-                    .get(client)
-                    .is_some_and(|account| account.locked())
-                {
+                if self.accounts.get(client).is_some_and(|a| a.locked()) {
                     return Decision::Denied;
                 }
                 Decision::Approved(Event::Deposited {
@@ -65,17 +64,14 @@ impl Ledger {
                 })
             }
             Command::Withdrawal { client, tx, amount } => {
-                if self.records.contains_key(tx) {
+                if self.transactions.contains(tx) {
                     return Decision::Denied;
                 }
                 let account = self.accounts.get(client);
                 if account.is_some_and(|a| a.locked()) {
                     return Decision::Denied;
                 }
-                if account
-                    .map(|a| a.available() < *amount)
-                    .unwrap_or(true)
-                {
+                if account.map(|a| a.available() < *amount).unwrap_or(true) {
                     return Decision::Denied;
                 }
                 Decision::Approved(Event::Withdrawn {
@@ -85,151 +81,60 @@ impl Ledger {
                 })
             }
             Command::Dispute { client, tx } => {
-                let Some(record) = self.records.get(tx) else {
+                let Some(transaction) = self.transactions.get(tx) else {
                     return Decision::Denied;
                 };
-                if self
-                    .accounts
-                    .get(client)
-                    .is_some_and(|a| a.locked())
-                {
+                if self.accounts.get(client).is_some_and(|a| a.locked()) {
                     return Decision::Denied;
                 }
-                if record.client != *client || !record.is_disputable() {
+                if transaction.client != *client || !transaction.is_disputable() {
                     return Decision::Denied;
                 }
                 Decision::Approved(Event::DisputeOpened {
                     client: *client,
                     tx: *tx,
-                    amount: record.amount,
+                    amount: transaction.amount,
                 })
             }
             Command::Resolve { client, tx } => {
-                let Some(record) = self.records.get(tx) else {
+                let Some(transaction) = self.transactions.get(tx) else {
                     return Decision::Denied;
                 };
-                if self
-                    .accounts
-                    .get(client)
-                    .is_some_and(|a| a.locked())
-                {
+                if self.accounts.get(client).is_some_and(|a| a.locked()) {
                     return Decision::Denied;
                 }
-                if record.client != *client || !record.state.is_resolvable() {
+                if transaction.client != *client || !transaction.state.is_resolvable() {
                     return Decision::Denied;
                 }
                 Decision::Approved(Event::DisputeResolved {
                     client: *client,
                     tx: *tx,
-                    amount: record.amount,
+                    amount: transaction.amount,
                 })
             }
             Command::Chargeback { client, tx } => {
-                let Some(record) = self.records.get(tx) else {
+                let Some(transaction) = self.transactions.get(tx) else {
                     return Decision::Denied;
                 };
-                if self
-                    .accounts
-                    .get(client)
-                    .is_some_and(|a| a.locked())
-                {
+                if self.accounts.get(client).is_some_and(|a| a.locked()) {
                     return Decision::Denied;
                 }
-                if record.client != *client || !record.state.is_chargebackable() {
+                if transaction.client != *client || !transaction.state.is_chargebackable() {
                     return Decision::Denied;
                 }
                 Decision::Approved(Event::ChargedBack {
                     client: *client,
                     tx: *tx,
-                    amount: record.amount,
+                    amount: transaction.amount,
                 })
             }
         }
     }
 
-    /// Applies a validated event to accounts and records unconditionally.
+    /// Applies a validated event to both aggregates.
     fn apply(&mut self, event: Event) {
-        match event {
-            Event::Deposited {
-                client,
-                tx,
-                amount,
-            } => {
-                let account = self
-                    .accounts
-                    .entry(client)
-                    .or_insert_with(|| Account::new(client));
-                let _ = account.deposit(amount);
-                self.records.insert(
-                    tx,
-                    Record {
-                        client,
-                        amount,
-                        kind: Kind::Deposit,
-                        state: State::Valid,
-                    },
-                );
-            }
-            Event::Withdrawn {
-                client,
-                tx,
-                amount,
-            } => {
-                let account = self
-                    .accounts
-                    .get_mut(&client)
-                    .expect("account must exist");
-                let _ = account.withdraw(amount);
-                self.records.insert(
-                    tx,
-                    Record {
-                        client,
-                        amount,
-                        kind: Kind::Withdrawal,
-                        state: State::Valid,
-                    },
-                );
-            }
-            Event::DisputeOpened {
-                client: _,
-                tx,
-                amount,
-            } => {
-                let record = self.records.get_mut(&tx).expect("record must exist");
-                let account = self
-                    .accounts
-                    .get_mut(&record.client)
-                    .expect("account must exist");
-                record.state = State::Disputed;
-                let _ = account.hold(amount);
-            }
-            Event::DisputeResolved {
-                client: _,
-                tx,
-                amount,
-            } => {
-                let record = self.records.get_mut(&tx).expect("record must exist");
-                let account = self
-                    .accounts
-                    .get_mut(&record.client)
-                    .expect("account must exist");
-                record.state = State::Resolved;
-                let _ = account.release(amount);
-            }
-            Event::ChargedBack {
-                client: _,
-                tx,
-                amount,
-            } => {
-                let record = self.records.get_mut(&tx).expect("record must exist");
-                let account = self
-                    .accounts
-                    .get_mut(&record.client)
-                    .expect("account must exist");
-                record.state = State::Chargedback;
-                let _ = account.chargeback(amount);
-            }
-        }
+        self.transactions.apply(event);
+        self.accounts.apply(event);
     }
 }
 

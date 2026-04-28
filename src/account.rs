@@ -1,5 +1,8 @@
+use std::collections::HashMap;
+
 use crate::amount::Amount;
 use crate::balance::{Balance, BalanceError};
+use crate::event::Event;
 use crate::funds::Funds;
 use crate::id::ClientId;
 
@@ -124,6 +127,71 @@ impl Account {
         self.balance.chargeback(amount);
         self.locked = true;
         Ok(())
+    }
+}
+
+/// All client accounts, indexed by client ID — the account aggregate.
+///
+/// Owns balance state and locked status. Used by the ledger to validate
+/// commands against account state and to produce the final output.
+#[derive(Default)]
+pub(crate) struct Accounts(HashMap<ClientId, Account>);
+
+impl Accounts {
+    /// Returns a reference to the account for the given client, if it exists.
+    pub(crate) fn get(&self, client: &ClientId) -> Option<&Account> {
+        self.0.get(client)
+    }
+
+    /// Applies a validated event, updating account state.
+    pub(crate) fn apply(&mut self, event: Event) {
+        match event {
+            Event::Deposited {
+                client,
+                tx: _,
+                amount,
+            } => {
+                let account = self.0.entry(client).or_insert_with(|| Account::new(client));
+                let _ = account.deposit(amount);
+            }
+            Event::Withdrawn {
+                client,
+                tx: _,
+                amount,
+            } => {
+                let account = self.0.get_mut(&client).expect("account must exist");
+                let _ = account.withdraw(amount);
+            }
+            Event::DisputeOpened {
+                client,
+                tx: _,
+                amount,
+            } => {
+                let account = self.0.get_mut(&client).expect("account must exist");
+                let _ = account.hold(amount);
+            }
+            Event::DisputeResolved {
+                client,
+                tx: _,
+                amount,
+            } => {
+                let account = self.0.get_mut(&client).expect("account must exist");
+                let _ = account.release(amount);
+            }
+            Event::ChargedBack {
+                client,
+                tx: _,
+                amount,
+            } => {
+                let account = self.0.get_mut(&client).expect("account must exist");
+                let _ = account.chargeback(amount);
+            }
+        }
+    }
+
+    /// Consumes the aggregate and returns the inner accounts map.
+    pub(crate) fn into_accounts(self) -> HashMap<ClientId, Account> {
+        self.0
     }
 }
 
