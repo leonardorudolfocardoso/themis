@@ -18,6 +18,7 @@ use crate::transaction::{Kind, Record, State};
 /// - All operations on locked accounts are silently ignored.
 #[derive(Default)]
 pub struct Ledger {
+    log: Vec<Event>,
     accounts: HashMap<ClientId, Account>,
     records: HashMap<TransactionId, Record>,
 }
@@ -34,6 +35,7 @@ impl Ledger {
     pub fn process(mut self, transactions: impl Iterator<Item = Command>) -> HashMap<u16, Account> {
         for command in transactions {
             if let Decision::Approved(event) = self.decide(&command) {
+                self.log.push(event);
                 self.apply(event);
             }
         }
