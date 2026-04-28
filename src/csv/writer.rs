@@ -42,7 +42,7 @@ pub fn to_writer(writer: impl std::io::Write, accounts: impl Iterator<Item = Acc
 mod test {
     use super::*;
     use crate::amount::Amount;
-    use crate::event::Event;
+    use crate::command::Command;
     use crate::processor::Processor;
 
     fn account_with(
@@ -51,19 +51,19 @@ mod test {
         held: u64,
         locked: bool,
     ) -> crate::account::Account {
-        let mut events: Vec<Event> = vec![Event::Deposit {
+        let mut commands: Vec<Command> = vec![Command::Deposit {
             client,
             tx: 1,
             amount: Amount::raw((available + held as i64) as u64),
         }];
         if held > 0 {
-            events.push(Event::Dispute { client, tx: 1 });
+            commands.push(Command::Dispute { client, tx: 1 });
         }
         if locked {
-            events.push(Event::Chargeback { client, tx: 1 });
+            commands.push(Command::Chargeback { client, tx: 1 });
         }
         Processor::new()
-            .process(events.into_iter())
+            .process(commands.into_iter())
             .remove(&client)
             .unwrap()
     }

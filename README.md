@@ -2,7 +2,7 @@
 
 > In Greek mythology, Themis is the goddess of justice, law, and divine order — the keeper of rules that cannot be broken.
 
-Themis is a financial transaction processor. It reads a stream of transaction events from a CSV file, applies them to client accounts, and outputs the resulting account state. Like its namesake, it enforces rules that cannot be bent: a locked account stays locked, a withdrawal dispute is ignored, a chargeback that leaves a balance negative is still recorded faithfully.
+Themis is a financial transaction processor. It reads a stream of transaction commands from a CSV file, applies them to client accounts, and outputs the resulting account state. Like its namesake, it enforces rules that cannot be bent: a locked account stays locked, a withdrawal dispute is ignored, a chargeback that leaves a balance negative is still recorded faithfully.
 
 ## Usage
 
@@ -83,25 +83,25 @@ sequenceDiagram
     participant Out as CSV Output
 
     CSV->>Reader: raw row
-    Reader->>Processor: Event (Deposit / Withdrawal) or skip invalid row
+    Reader->>Processor: Command (Deposit / Withdrawal) or skip invalid row
     Processor->>Records: check duplicate tx
     Processor->>Account: deposit() / withdraw()
     Processor->>Records: store record on success
 
     CSV->>Reader: raw row
-    Reader->>Processor: Event (Dispute)
+    Reader->>Processor: Command (Dispute)
     Processor->>Records: lookup valid deposit for same client
     Processor->>Account: hold()
     Processor->>Records: mark Disputed on success
 
     CSV->>Reader: raw row
-    Reader->>Processor: Event (Resolve)
+    Reader->>Processor: Command (Resolve)
     Processor->>Records: lookup disputed record for same client
     Processor->>Account: release()
     Processor->>Records: mark Resolved on success
 
     CSV->>Reader: raw row
-    Reader->>Processor: Event (Chargeback)
+    Reader->>Processor: Command (Chargeback)
     Processor->>Records: lookup disputed record for same client
     Processor->>Account: chargeback() and lock account
     Processor->>Records: mark Chargedback on success
