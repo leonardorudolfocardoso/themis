@@ -34,8 +34,8 @@ impl<S: EventStore> Ledger<S> {
         };
 
         for Recorded { event, .. } in ledger.store.read_all().flatten() {
-            ledger.transactions.apply(*event);
-            ledger.accounts.apply(*event);
+            ledger.transactions.apply(event);
+            ledger.accounts.apply(event);
         }
         ledger
     }

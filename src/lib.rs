@@ -19,4 +19,6 @@ pub use csv::from_reader;
 pub use csv::to_writer;
 pub use event::Event;
 pub use ledger::Ledger;
+pub use store::EventStore;
+pub use store::FileStore;
 pub use store::MemoryStore;
