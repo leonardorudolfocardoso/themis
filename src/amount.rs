@@ -2,6 +2,8 @@ use std::fmt;
 use std::ops::{AddAssign, SubAssign};
 use std::str::FromStr;
 
+use serde::{Deserialize, Serialize};
+
 /// A non-negative monetary amount, stored as an integer in units of 0.0001.
 ///
 /// `Amount` is the type for all transaction values — deposits, withdrawals,
@@ -30,7 +32,7 @@ use std::str::FromStr;
 /// assert!("-1.0".parse::<Amount>().is_err());
 /// assert!("1.23456".parse::<Amount>().is_err());
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Amount(u64);
 
 impl Amount {

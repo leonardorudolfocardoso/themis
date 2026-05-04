@@ -1,6 +1,6 @@
 use crate::account::Accounts;
 use crate::command::Command;
-use crate::event::{Decision, Event, Log};
+use crate::event::{Decision, Event, Log, Recorded};
 use crate::transaction::Transactions;
 
 /// Processes a stream of transaction commands and maintains account state.
@@ -29,10 +29,10 @@ impl Ledger {
     /// Rebuilds a ledger by replaying a sequence of previously validated events.
     ///
     /// No validation is performed — events are recorded unconditionally.
-    pub fn replay(events: impl Iterator<Item = Event>) -> Self {
+    pub fn replay(records: impl Iterator<Item = Recorded>) -> Self {
         let mut ledger = Self::new();
-        for event in events {
-            ledger.record(event);
+        for record in records {
+            ledger.record(record.event);
         }
         ledger
     }
