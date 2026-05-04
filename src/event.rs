@@ -5,10 +5,10 @@ use serde::{Deserialize, Serialize};
 use crate::amount::Amount;
 use crate::id::{ClientId, TransactionId};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Recorded {
-    position: u64,
-    recorded_at: SystemTime,
+    pub(crate) position: u64,
+    pub(crate) recorded_at: SystemTime,
     pub(crate) event: Event,
 }
 
@@ -16,7 +16,7 @@ pub struct Recorded {
 ///
 /// Events are the output of the decision phase — each variant
 /// carries all data needed to apply the mutation without further lookups.
-#[derive(Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum Event {
     /// Funds were credited to the client's account.
     Deposited {
@@ -71,28 +71,4 @@ pub(crate) enum Decision {
     Approved(Event),
     /// The command was rejected (duplicate, locked, insufficient funds, etc.).
     Denied,
-}
-
-/// Append-only event log — the source of truth for all state changes.
-#[derive(Default)]
-pub struct Log(Vec<Recorded>);
-
-impl Log {
-    /// Appends an event to the log.
-    pub(crate) fn push(&mut self, event: Event) {
-        self.0.push(Recorded {
-            event,
-            position: self.0.len() as u64,
-            recorded_at: SystemTime::now(),
-        });
-    }
-}
-
-impl IntoIterator for Log {
-    type Item = Recorded;
-    type IntoIter = std::vec::IntoIter<Recorded>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.0.into_iter()
-    }
 }

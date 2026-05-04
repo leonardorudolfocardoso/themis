@@ -1,17 +1,19 @@
 use std::{env, error::Error, fs::File, io};
-use themis::{Ledger, from_reader, to_writer};
+use themis::{Ledger, MemoryStore, from_reader, to_writer};
 
-fn run(input: impl io::Read, output: impl io::Write) {
-    let mut ledger = Ledger::new();
-    ledger.ingest(from_reader(input));
+fn run(input: impl io::Read, output: impl io::Write) -> io::Result<()> {
+    let store = MemoryStore::new();
+    let mut ledger = Ledger::new(store);
+    ledger.ingest(from_reader(input))?;
     to_writer(output, ledger.into_accounts());
+    Ok(())
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
     let path = env::args()
         .nth(1)
         .ok_or("usage: themis <transactions.csv>")?;
-    run(File::open(path)?, io::stdout());
+    run(File::open(path)?, io::stdout())?;
     Ok(())
 }
 
@@ -23,7 +25,7 @@ mod test {
     fn test_integration() {
         let input = std::fs::read("tests/fixtures/transactions.csv").unwrap();
         let mut output = Vec::new();
-        run(input.as_slice(), &mut output);
+        run(input.as_slice(), &mut output).unwrap();
         let csv = String::from_utf8(output).unwrap();
         let lines: Vec<&str> = csv.lines().collect();
 
@@ -53,7 +55,7 @@ mod test {
     fn test_large_deposit_stays_positive() {
         let input = b"type,client,tx,amount\ndeposit,1,1,922337203685477.5808\n";
         let mut output = Vec::new();
-        run(input.as_slice(), &mut output);
+        run(input.as_slice(), &mut output).unwrap();
         let csv = String::from_utf8(output).unwrap();
         assert!(csv.contains("1,922337203685477.5808,0.0000,922337203685477.5808,false"));
     }

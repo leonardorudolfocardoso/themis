@@ -1,6 +1,9 @@
+use std::io;
+
 use crate::account::Accounts;
 use crate::command::Command;
-use crate::event::{Decision, Event, Log, Recorded};
+use crate::event::{Decision, Event, Recorded};
+use crate::store::EventStore;
 use crate::transaction::Transactions;
 
 /// Processes a stream of transaction commands and maintains account state.
@@ -13,37 +16,42 @@ use crate::transaction::Transactions;
 /// - Disputes, resolves, and chargebacks must reference a transaction
 ///   belonging to the same client.
 /// - All operations on locked accounts are silently ignored.
-#[derive(Default)]
-pub struct Ledger {
-    log: Log,
+pub struct Ledger<S: EventStore> {
+    store: S,
     transactions: Transactions,
     accounts: Accounts,
 }
 
-impl Ledger {
+impl<S: EventStore> Ledger<S> {
     /// Creates a new ledger with no accounts or transaction history.
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(store: S) -> Self {
+        Ledger {
+            store,
+            transactions: Default::default(),
+            accounts: Default::default(),
+        }
     }
 
     /// Rebuilds a ledger by replaying a sequence of previously validated events.
     ///
     /// No validation is performed — events are recorded unconditionally.
-    pub fn replay(records: impl Iterator<Item = Recorded>) -> Self {
-        let mut ledger = Self::new();
-        for record in records {
-            ledger.record(record.event);
+    pub fn replay(store: S) -> Self {
+        let mut ledger = Self::new(store);
+        for Recorded { event, .. } in ledger.store.read_all().flatten() {
+            ledger.transactions.apply(*event);
+            ledger.accounts.apply(*event);
         }
         ledger
     }
 
     /// Ingests a stream of commands, validating each and recording approved events.
-    pub fn ingest(&mut self, commands: impl Iterator<Item = Command>) {
+    pub fn ingest(&mut self, commands: impl Iterator<Item = Command>) -> io::Result<()> {
         for command in commands {
             if let Decision::Approved(event) = self.decide(&command) {
-                self.record(event);
+                self.record(event)?;
             }
         }
+        Ok(())
     }
 
     /// Consumes the ledger and returns the final account state.
@@ -51,9 +59,9 @@ impl Ledger {
         self.accounts
     }
 
-    /// Consumes the ledger and returns the event log.
-    pub fn into_log(self) -> Log {
-        self.log
+    /// Consumes the ledger and returns the event store.
+    pub fn into_store(self) -> S {
+        self.store
     }
 
     /// Validates a command against current state and returns a decision.
@@ -124,10 +132,11 @@ impl Ledger {
     }
 
     /// Records an event: appends to the log and updates both aggregates.
-    fn record(&mut self, event: Event) {
-        self.log.push(event);
+    fn record(&mut self, event: Event) -> io::Result<()> {
+        let Recorded { event, .. } = self.store.append(event)?;
         self.transactions.apply(event);
         self.accounts.apply(event);
+        Ok(())
     }
 }
 
@@ -137,10 +146,12 @@ mod test {
     use crate::account::Accounts;
     use crate::amount::Amount;
     use crate::command::Command;
+    use crate::store::MemoryStore;
 
     fn ingest(commands: Vec<Command>) -> Accounts {
-        let mut ledger = Ledger::new();
-        ledger.ingest(commands.into_iter());
+        let store = MemoryStore::new();
+        let mut ledger = Ledger::new(store);
+        ledger.ingest(commands.into_iter()).unwrap();
         ledger.into_accounts()
     }
 
@@ -523,12 +534,13 @@ mod test {
         ];
 
         // Process commands and capture the log.
-        let mut ledger = Ledger::new();
-        ledger.ingest(commands.into_iter());
-        let log = ledger.into_log();
+        let store = MemoryStore::new();
+        let mut ledger = Ledger::new(store);
+        ledger.ingest(commands.into_iter()).unwrap();
+        let store = ledger.into_store();
 
         // Replay the log into a fresh ledger.
-        let replayed = Ledger::replay(log.into_iter()).into_accounts();
+        let replayed = Ledger::replay(store).into_accounts();
 
         let a1 = replayed.get(&1).unwrap();
         assert_eq!(a1.available(), 70);

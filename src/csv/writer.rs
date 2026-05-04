@@ -44,10 +44,12 @@ mod test {
     use crate::amount::Amount;
     use crate::command::Command;
     use crate::ledger::Ledger;
+    use crate::store::MemoryStore;
 
     fn accounts_from(commands: Vec<Command>) -> Accounts {
-        let mut ledger = Ledger::new();
-        ledger.ingest(commands.into_iter());
+        let store = MemoryStore::new();
+        let mut ledger = Ledger::new(store);
+        ledger.ingest(commands.into_iter()).unwrap();
         ledger.into_accounts()
     }
 
