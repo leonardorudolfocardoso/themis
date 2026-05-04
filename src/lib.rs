@@ -21,4 +21,3 @@ pub use event::Event;
 pub use ledger::Ledger;
 pub use store::EventStore;
 pub use store::FileStore;
-pub use store::MemoryStore;

@@ -12,20 +12,24 @@ pub trait EventStore {
     fn read_all(&mut self) -> impl Iterator<Item = io::Result<Recorded>>;
 }
 
+#[cfg(test)]
 pub struct MemoryStore(Vec<Recorded>);
 
+#[cfg(test)]
 impl MemoryStore {
     pub fn new() -> MemoryStore {
         MemoryStore(vec![])
     }
 }
 
+#[cfg(test)]
 impl Default for MemoryStore {
     fn default() -> Self {
         Self::new()
     }
 }
 
+#[cfg(test)]
 impl EventStore for MemoryStore {
     fn append(&mut self, event: Event) -> io::Result<Recorded> {
         let recorded = Recorded {
