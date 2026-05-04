@@ -3,7 +3,7 @@ use themis::{Ledger, MemoryStore, from_reader, to_writer};
 
 fn run(input: impl io::Read, output: impl io::Write) -> io::Result<()> {
     let store = MemoryStore::new();
-    let mut ledger = Ledger::new(store);
+    let mut ledger = Ledger::replay(store);
     ledger.ingest(from_reader(input))?;
     to_writer(output, ledger.into_accounts());
     Ok(())

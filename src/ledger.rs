@@ -23,20 +23,16 @@ pub struct Ledger<S: EventStore> {
 }
 
 impl<S: EventStore> Ledger<S> {
-    /// Creates a new ledger with no accounts or transaction history.
-    pub fn new(store: S) -> Self {
-        Ledger {
-            store,
-            transactions: Default::default(),
-            accounts: Default::default(),
-        }
-    }
-
     /// Rebuilds a ledger by replaying a sequence of previously validated events.
     ///
     /// No validation is performed — events are recorded unconditionally.
-    pub fn replay(store: S) -> Self {
-        let mut ledger = Self::new(store);
+    pub fn replay(store: S) -> Ledger<S> {
+        let mut ledger = Ledger {
+            store,
+            transactions: Default::default(),
+            accounts: Default::default(),
+        };
+
         for Recorded { event, .. } in ledger.store.read_all().flatten() {
             ledger.transactions.apply(*event);
             ledger.accounts.apply(*event);
@@ -150,7 +146,7 @@ mod test {
 
     fn ingest(commands: Vec<Command>) -> Accounts {
         let store = MemoryStore::new();
-        let mut ledger = Ledger::new(store);
+        let mut ledger = Ledger::replay(store);
         ledger.ingest(commands.into_iter()).unwrap();
         ledger.into_accounts()
     }
@@ -535,7 +531,7 @@ mod test {
 
         // Process commands and capture the log.
         let store = MemoryStore::new();
-        let mut ledger = Ledger::new(store);
+        let mut ledger = Ledger::replay(store);
         ledger.ingest(commands.into_iter()).unwrap();
         let store = ledger.into_store();
 
