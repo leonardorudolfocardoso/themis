@@ -1,0 +1,8 @@
+{"position":0,"recorded_at":{"secs_since_epoch":0,"nanos_since_epoch":0},"event":{"Deposited":{"client":1,"tx":1,"amount":1000000}}}
+{"position":1,"recorded_at":{"secs_since_epoch":0,"nanos_since_epoch":0},"event":{"Deposited":{"client":1,"tx":2,"amount":500000}}}
+{"position":2,"recorded_at":{"secs_since_epoch":0,"nanos_since_epoch":0},"event":{"Withdrawn":{"client":1,"tx":3,"amount":300000}}}
+{"position":3,"recorded_at":{"secs_since_epoch":0,"nanos_since_epoch":0},"event":{"DisputeOpened":{"client":1,"tx":1,"amount":1000000}}}
+{"position":4,"recorded_at":{"secs_since_epoch":0,"nanos_since_epoch":0},"event":{"DisputeResolved":{"client":1,"tx":1,"amount":1000000}}}
+{"position":5,"recorded_at":{"secs_since_epoch":0,"nanos_since_epoch":0},"event":{"Deposited":{"client":2,"tx":4,"amount":2000000}}}
+{"position":6,"recorded_at":{"secs_since_epoch":0,"nanos_since_epoch":0},"event":{"DisputeOpened":{"client":2,"tx":4,"amount":2000000}}}
+{"position":7,"recorded_at":{"secs_since_epoch":0,"nanos_since_epoch":0},"event":{"ChargedBack":{"client":2,"tx":4,"amount":2000000}}}
