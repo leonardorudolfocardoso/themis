@@ -48,7 +48,7 @@ mod test {
 
     fn accounts_from(commands: Vec<Command>) -> Accounts {
         let store = MemoryStore::new();
-        let mut ledger = Ledger::replay(store);
+        let mut ledger = Ledger::replay(store).unwrap();
         ledger.ingest(commands.into_iter()).unwrap();
         ledger.into_accounts()
     }

@@ -26,18 +26,20 @@ impl<S: EventStore> Ledger<S> {
     /// Rebuilds a ledger by replaying a sequence of previously validated events.
     ///
     /// No validation is performed — events are recorded unconditionally.
-    pub fn replay(store: S) -> Ledger<S> {
+    pub fn replay(store: S) -> io::Result<Ledger<S>> {
         let mut ledger = Ledger {
             store,
             transactions: Default::default(),
             accounts: Default::default(),
         };
 
-        for Recorded { event, .. } in ledger.store.read_all().flatten() {
+        for read in ledger.store.read_all() {
+            let Recorded { event, .. } = read?;
             ledger.transactions.apply(event);
             ledger.accounts.apply(event);
         }
-        ledger
+
+        Ok(ledger)
     }
 
     /// Ingests a stream of commands, validating each and recording approved events.
@@ -146,7 +148,7 @@ mod test {
 
     fn ingest(commands: Vec<Command>) -> Accounts {
         let store = MemoryStore::new();
-        let mut ledger = Ledger::replay(store);
+        let mut ledger = Ledger::replay(store).unwrap();
         ledger.ingest(commands.into_iter()).unwrap();
         ledger.into_accounts()
     }
@@ -531,12 +533,12 @@ mod test {
 
         // Process commands and capture the log.
         let store = MemoryStore::new();
-        let mut ledger = Ledger::replay(store);
+        let mut ledger = Ledger::replay(store).unwrap();
         ledger.ingest(commands.into_iter()).unwrap();
         let store = ledger.into_store();
 
         // Replay the log into a fresh ledger.
-        let replayed = Ledger::replay(store).into_accounts();
+        let replayed = Ledger::replay(store).unwrap().into_accounts();
 
         let a1 = replayed.get(&1).unwrap();
         assert_eq!(a1.available(), 70);
